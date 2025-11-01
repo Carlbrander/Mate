@@ -4,7 +4,7 @@
 ANTHROPIC_API_KEY = open("api_key/api_key.txt", "r").read().strip()
 
 # Claude model to use
-CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+CLAUDE_MODEL = "claude-sonnet-4-5"
 
 # Prompt settings
 # {text} will be replaced with the selected text
