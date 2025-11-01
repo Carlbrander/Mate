@@ -2,3 +2,4 @@
 /venv/
 .vscode/
 __pycache__/
+context_retrieval/context_retrieval.log
