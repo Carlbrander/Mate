@@ -79,7 +79,7 @@ def generate_insights(learning_objective: str, context: str) -> Insights | None:
                         learning_objective=learning_objective,
                         text=context,
                         instructions="; ".join([config.SUMMARY_GENERATION_INSTRUCTION, config.LINK_GENERATION_INSTRUCTION, config.SUGGESTIONS_GENERATION_INSTRUCTION]),
-                        output_format='{"summary": "...", "links": [{"url": "link1", "summary": "summary1"}, {"url": "link2", "summary": "summary2"}, ...], "suggestions": "..."}',
+                        output_format='{"summary": "...", "links": [{"url": "https://link1.com", "summary": "summary1"}, {"url": "https://link2.com", "summary": "summary2"}, ...], "suggestions": "..."}',
                     ),
                 }
             ],
