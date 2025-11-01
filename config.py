@@ -29,8 +29,8 @@ The output should be in the following format: {output_format}
 
 Important: consider student learning objective when generating insights
 """
-SUMMARY_GENERATION_INSTRUCTION = "provide short summary"
-LINK_GENERATION_INSTRUCTION = "provide urls with link texts that student can click to get further information"
+SUMMARY_GENERATION_INSTRUCTION = "provide short summary of the screen content"
+LINK_GENERATION_INSTRUCTION = "provide urls with link descriptions (8 words max prompting student to visit the link) that predict the next step in the learning process based on the screen content"
 SUGGESTIONS_GENERATION_INSTRUCTION = "make suggestions how student can continue their learning based on the screen content and your findings"
 
 # Button settings
