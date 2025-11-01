@@ -5,6 +5,7 @@ import pyperclip
 import pyautogui
 import time
 import math
+import os
 
 import signal
 import sys
@@ -12,6 +13,279 @@ from anthropic import Anthropic
 import config
 import ctypes
 import re
+
+def show_study_topic_dialog():
+    """Show startup dialog to ask user what they're studying"""
+    # Set DPI awareness before creating any windows (Windows only)
+    dpi_scale = 1.0
+    try:
+        from ctypes import windll
+        user32 = windll.user32
+        # Get the DPI scaling factor
+        # Standard DPI is 96, so scaling = actual_dpi / 96
+        try:
+            # Try to get DPI for the primary monitor
+            hdc = user32.GetDC(0)
+            dpi = windll.gdi32.GetDeviceCaps(hdc, 88)  # 88 = LOGPIXELSX
+            user32.ReleaseDC(0, hdc)
+            dpi_scale = dpi / 96.0
+            print(f"Detected DPI: {dpi} (scale factor: {dpi_scale})")
+        except:
+            pass
+        user32.SetProcessDPIAware()
+    except:
+        pass
+    
+    # Create a dedicated CTk window for the dialog
+    dialog = ctk.CTk()
+    
+    # Remove title bar for clean rounded corner window
+    dialog.overrideredirect(True)
+    
+    # Set transparent background color
+    transparent_color = "#010101"  # Near-black color to make transparent
+    dialog.configure(fg_color=transparent_color)
+    dialog.wm_attributes('-transparentcolor', transparent_color)
+    
+    # Center the window on screen - get actual screen dimensions
+    window_width = 500
+    window_height = 280
+    
+    # Update window to ensure proper screen dimension detection
+    dialog.update_idletasks()
+    
+    # Get screen dimensions - use tkinter's coordinate system
+    screen_width = dialog.winfo_screenwidth()
+    screen_height = dialog.winfo_screenheight()
+    
+    print(f"Tkinter screen dimensions: {screen_width}x{screen_height}")
+    print(f"DPI scale factor: {dpi_scale}")
+    print(f"Dialog window size: {window_width}x{window_height}")
+    
+    # Calculate center position accounting for DPI scaling
+    # The window will be DPI scaled, so we need to account for the actual rendered size
+    actual_window_width = int(window_width * dpi_scale)
+    actual_window_height = int(window_height * dpi_scale)
+    
+    print(f"Window will be DPI scaled to: {actual_window_width}x{actual_window_height}")
+    
+    # Calculate position using the ACTUAL (scaled) window size
+    x = (screen_width - actual_window_width) // 2
+    y = (screen_height - actual_window_height) // 2
+    
+    # Verify centering with actual scaled dimensions
+    window_center_x = x + (actual_window_width // 2)
+    window_center_y = y + (actual_window_height // 2)
+    screen_center_x = screen_width // 2
+    screen_center_y = screen_height // 2
+    
+    print(f"Window top-left at: ({x}, {y})")
+    print(f"Expected window center: ({window_center_x}, {window_center_y})")
+    print(f"Screen center: ({screen_center_x}, {screen_center_y})")
+    print(f"Expected center offset: ({window_center_x - screen_center_x}, {window_center_y - screen_center_y})")
+    
+    # Set window size and position
+    dialog.geometry(f"{window_width}x{window_height}+{x}+{y}")
+    
+    # Force update to apply geometry
+    dialog.update_idletasks()
+    
+    # Verify actual position after setting
+    dialog.update()
+    actual_x = dialog.winfo_x()
+    actual_y = dialog.winfo_y()
+    actual_width = dialog.winfo_width()
+    actual_height = dialog.winfo_height()
+    
+    print(f"\n=== WINDOW POSITIONING DEBUG ===")
+    print(f"Requested position: ({x}, {y})")
+    print(f"Actual position: ({actual_x}, {actual_y})")
+    print(f"Requested size: {window_width}x{window_height}")
+    print(f"Actual size reported by winfo: {actual_width}x{actual_height}")
+    
+    # Calculate where the window actually is on screen
+    actual_center_x = actual_x + (actual_width // 2)
+    actual_center_y = actual_y + (actual_height // 2)
+    print(f"Actual window center: ({actual_center_x}, {actual_center_y})")
+    print(f"Screen center: ({screen_width // 2}, {screen_height // 2})")
+    print(f"Visual center offset: ({actual_center_x - screen_width // 2}, {actual_center_y - screen_height // 2})")
+    
+    # Check for DPI scaling affecting window size
+    if actual_width != window_width or actual_height != window_height:
+        print(f"WARNING: Window size mismatch! Window may be DPI scaled.")
+        size_scale_x = actual_width / window_width if window_width > 0 else 1
+        size_scale_y = actual_height / window_height if window_height > 0 else 1
+        print(f"Window size scale factors: x={size_scale_x:.2f}, y={size_scale_y:.2f}")
+    
+    # Check if position matches what we requested
+    if abs(actual_x - x) > 5 or abs(actual_y - y) > 5:
+        print(f"WARNING: Window position mismatch by more than 5 pixels!")
+        print(f"  Difference: ({actual_x - x}, {actual_y - y})")
+        
+        # Try to correct by adjusting for the difference
+        corrected_x = x - (actual_x - x)
+        corrected_y = y - (actual_y - y)
+        print(f"Attempting correction to: ({corrected_x}, {corrected_y})")
+        dialog.geometry(f"+{corrected_x}+{corrected_y}")
+        dialog.update()
+        final_x = dialog.winfo_x()
+        final_y = dialog.winfo_y()
+        print(f"Position after correction: ({final_x}, {final_y})")
+        
+        # Check final center position
+        final_center_x = final_x + (dialog.winfo_width() // 2)
+        final_center_y = final_y + (dialog.winfo_height() // 2)
+        print(f"Final window center: ({final_center_x}, {final_center_y})")
+        print(f"Final center offset: ({final_center_x - screen_width // 2}, {final_center_y - screen_height // 2})")
+    
+    print(f"=== END DEBUG ===\n")
+    
+    # Ensure window is on top
+    dialog.attributes('-topmost', True)
+    
+    # Variable to store the result
+    study_topic = tk.StringVar()
+    dialog_closed = tk.BooleanVar(value=False)
+    
+    # Define close handler early so it can be used by close button
+    def on_closing():
+        dialog_closed.set(True)
+        dialog.quit()  # Exit mainloop
+    
+    # Main container with rounded corners
+    main_container = ctk.CTkFrame(
+        dialog,
+        fg_color="white",
+        corner_radius=15,
+        border_width=2,
+        border_color="#e0e0e0"
+    )
+    main_container.pack(fill='both', expand=True, padx=0, pady=0)
+    
+    # Close button (X) in top-right corner
+    close_button = ctk.CTkButton(
+        main_container,
+        text="✕",
+        font=("Segoe UI", 16),
+        width=30,
+        height=30,
+        corner_radius=15,
+        fg_color="transparent",
+        text_color="#999999",
+        hover_color="#f0f0f0",
+        command=lambda: on_closing()
+    )
+    close_button.place(x=window_width - 50, y=10)
+    
+    # Title
+    title_label = ctk.CTkLabel(
+        main_container,
+        text="What are you studying today?",
+        font=("Segoe UI", 18, "bold"),
+        text_color="#333333"
+    )
+    title_label.pack(pady=(30, 10))
+    
+    # Subtitle
+    subtitle_label = ctk.CTkLabel(
+        main_container,
+        text="This helps me tailor explanations to your learning context",
+        font=("Segoe UI", 11),
+        text_color="#666666"
+    )
+    subtitle_label.pack(pady=(0, 20))
+    
+    # Frame for input and checkmark
+    input_frame = ctk.CTkFrame(
+        main_container,
+        fg_color="white"
+    )
+    input_frame.pack(pady=20, padx=40, fill='x')
+    
+    # Text entry with rounded corners
+    text_entry = ctk.CTkEntry(
+        input_frame,
+        placeholder_text="e.g., Machine Learning, Spanish, Guitar...",
+        font=("Segoe UI", 14),
+        height=45,
+        corner_radius=10,
+        border_width=2,
+        border_color="#667eea",
+        fg_color="white",
+        text_color="#333333"
+    )
+    text_entry.pack(side='left', fill='x', expand=True, padx=(0, 10))
+    text_entry.focus()  # Focus on the text entry
+    
+    def submit_topic():
+        """Save the topic and close the dialog"""
+        topic = text_entry.get().strip()
+        if topic:
+            study_topic.set(topic)
+        dialog_closed.set(True)
+        dialog.quit()  # Exit mainloop
+    
+    # Checkmark button
+    checkmark_button = ctk.CTkButton(
+        input_frame,
+        text="✓",
+        font=("Segoe UI", 24, "bold"),
+        width=45,
+        height=45,
+        corner_radius=10,
+        fg_color="#667eea",
+        hover_color="#764ba2",
+        command=submit_topic
+    )
+    checkmark_button.pack(side='right')
+    
+    # Bind Enter key to submit
+    text_entry.bind('<Return>', lambda e: submit_topic())
+    
+    # Wait for dialog to close
+    dialog.mainloop()
+    
+    # Get the result before destroying
+    result = study_topic.get() if dialog_closed.get() else ""
+    
+    # Hide the window immediately (user won't see cleanup delay)
+    dialog.withdraw()
+    
+    # Process all pending events and cancel remaining callbacks
+    try:
+        # Update multiple times to process all pending events
+        for _ in range(10):
+            dialog.update_idletasks()
+            dialog.update()
+    except:
+        pass
+    
+    # Wait for all scheduled callbacks to complete
+    time.sleep(0.2)
+    
+    # Force quit any remaining tkinter operations
+    try:
+        dialog.quit()
+    except:
+        pass
+    
+    # Now destroy the dialog - wrap in try/except to suppress any errors
+    try:
+        import sys
+        import io
+        # Temporarily redirect stderr to suppress CustomTkinter cleanup errors
+        old_stderr = sys.stderr
+        sys.stderr = io.StringIO()
+        
+        dialog.destroy()
+        
+        # Restore stderr
+        sys.stderr = old_stderr
+    except:
+        sys.stderr = old_stderr
+    
+    # Return the study topic (or empty string if none entered)
+    return result
 
 class ELI5Overlay:
     def __init__(self):
@@ -1120,6 +1394,22 @@ class ELI5Overlay:
 
 if __name__ == "__main__":
     try:
+        # Show the study topic dialog
+        study_topic = show_study_topic_dialog()
+        
+        # Save the study topic to environment variable
+        if study_topic:
+            os.environ['STUDY_TOPIC'] = study_topic
+            print(f"Study topic set to: {study_topic}")
+        else:
+            os.environ['STUDY_TOPIC'] = "General Study"
+            print("No study topic entered, using: General Study")
+        
+        # Verify environment variable is saved
+        print(f"Environment variable STUDY_TOPIC = '{os.environ.get('STUDY_TOPIC', 'NOT SET')}'")
+        print("")  # Empty line for readability
+        
+        # Start the main application
         app = ELI5Overlay()
         print("Mate Overlay is running. Press Ctrl+C to stop.")
         app.run()
