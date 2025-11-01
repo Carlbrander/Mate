@@ -1,3 +1,4 @@
 /api_key/api_key.txt
 /venv/
 __pycache__/config.cpython-310.pyc
+context_retrieval/context_retrieval.log
