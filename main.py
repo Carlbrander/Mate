@@ -16,6 +16,7 @@ from anthropic import Anthropic
 import config
 import ctypes
 import re
+from context_retrieval.ContextRetrievalService import ContextRetrievalService
 
 def show_study_topic_dialog():
     """Show startup dialog to ask user what they're studying"""

@@ -155,8 +155,11 @@ class ContextRetrievalService:
             try:
                 self.logger.info("Generating links from context...")
                 
-                # Use a generic learning objective
-                learning_objective = "User's current learning context from screen"
+                # Use the environment variable for learning objective
+                learning_objective = os.getenv("LEARNING_OBJECTIVE")
+                if not learning_objective:
+                    self.logger.warning("Learning objective environment variable is not set")
+                    return
                 
                 # Generate links using the function from insights_generation.py
                 insights = generate_links(learning_objective, self.latest_context)
