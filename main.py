@@ -6,6 +6,7 @@ import pyautogui
 import time
 import math
 import os
+from PIL import Image, ImageTk
 
 import signal
 import sys
@@ -365,21 +366,40 @@ class ELI5Overlay:
             width=0
         )
         
-        # Add text centered in main button
-        self.original_font_size = 12
-        self.button_text = self.canvas.create_text(
-            horizontal_offset + int(config.BUTTON_SIZE * 1.15) // 2,
-            main_button_y + int(config.BUTTON_SIZE * 1.15) // 2,
-            text=config.BUTTON_TEXT,
-            font=('Segoe UI', self.original_font_size, 'bold'),
-            fill='white'
-        )
+        # Add image centered in main button
+        try:
+            # Load the mate.png image
+            mate_image = Image.open("mate.png")
+            # Resize to fit in button (about 1/3 of button size)
+            image_size = int(config.BUTTON_SIZE * 0.4)
+            mate_image = mate_image.resize((image_size, image_size), Image.Resampling.LANCZOS)
+            self.mate_photo = ImageTk.PhotoImage(mate_image)
+            self.mate_image_original = mate_image  # Store original for resizing
+            
+            self.button_text = self.canvas.create_image(
+                horizontal_offset + int(config.BUTTON_SIZE * 1.15) // 2,
+                main_button_y + int(config.BUTTON_SIZE * 1.15) // 2,
+                image=self.mate_photo
+            )
+            self.is_image = True
+        except Exception as e:
+            # Fallback to text if image not found
+            print(f"Could not load mate.png: {e}, using text fallback")
+            self.original_font_size = 12
+            self.button_text = self.canvas.create_text(
+                horizontal_offset + int(config.BUTTON_SIZE * 1.15) // 2,
+                main_button_y + int(config.BUTTON_SIZE * 1.15) // 2,
+                text=config.BUTTON_TEXT,
+                font=('Segoe UI', self.original_font_size, 'bold'),
+                fill='white'
+            )
+            self.is_image = False
         
         # Create 3 additional smaller buttons (initially hidden at main button position)
         self.extra_buttons = []
         self.extra_button_icons = []
         button_colors = ['#764ba2', '#f093fb', '#4facfe']  # Different gradient colors
-        button_icons = ['📋', '🔍', '🍅']  # Icons: clipboard, magnifier, tomato (pomodoro)
+        button_icons = ['➕', '🔍', '🍅']  # Icons: plus, magnifier, tomato (pomodoro)
         
         for i in range(3):
             # Initially position at main button location (centered perfectly on main button center)
@@ -436,12 +456,17 @@ class ELI5Overlay:
         self.canvas.tag_bind(self.button_text, '<Leave>', self.check_leave)
         
         # Bind hover events to extra buttons to prevent closing when hovering over them
-        for button in self.extra_buttons:
-            self.canvas.tag_bind(button, '<Enter>', self.cancel_leave)
-            self.canvas.tag_bind(button, '<Leave>', self.check_leave)
-        for icon in self.extra_button_icons:
-            self.canvas.tag_bind(icon, '<Enter>', self.cancel_leave)
-            self.canvas.tag_bind(icon, '<Leave>', self.check_leave)
+        # Also add hover effects (grow on hover)
+        for i, (button, icon) in enumerate(zip(self.extra_buttons, self.extra_button_icons)):
+            # Hover enter - grow the button and keep menu open
+            enter_handler = lambda e, idx=i: self.on_extra_button_hover(e, idx)
+            self.canvas.tag_bind(button, '<Enter>', enter_handler)
+            self.canvas.tag_bind(icon, '<Enter>', enter_handler)
+            
+            # Hover leave - shrink back and check if leaving menu
+            leave_handler = lambda e, idx=i: self.on_extra_button_leave(e, idx)
+            self.canvas.tag_bind(button, '<Leave>', leave_handler)
+            self.canvas.tag_bind(icon, '<Leave>', leave_handler)
         
         # Bind click events to extra buttons
         for i, (button, icon) in enumerate(zip(self.extra_buttons, self.extra_button_icons)):
@@ -466,6 +491,10 @@ class ELI5Overlay:
         self.is_dragging = False
         self.is_hovered = False
         self.leave_timer = None  # For delayed leave detection
+        
+        # Extra button hover state tracking
+        self.extra_button_hover_state = [False, False, False]
+        self.extra_button_shrink_timers = [None, None, None]
         
         # Pomodoro timer state
         self.pomodoro_active = False
@@ -714,9 +743,17 @@ class ELI5Overlay:
             center_y = main_button_y + int(config.BUTTON_SIZE * 1.15) // 2
             self.canvas.scale(self.button_circle, center_x, center_y, 1.1, 1.1)
             
-            # Make text bigger by increasing font size
-            new_font_size = int(self.original_font_size * 1.1)
-            self.canvas.itemconfig(self.button_text, font=('Segoe UI', new_font_size, 'bold'))
+            # Scale up text or image
+            if self.is_image:
+                # Scale up image
+                new_size = int(config.BUTTON_SIZE * 0.4 * 1.1)
+                scaled_image = self.mate_image_original.resize((new_size, new_size), Image.Resampling.LANCZOS)
+                self.mate_photo = ImageTk.PhotoImage(scaled_image)
+                self.canvas.itemconfig(self.button_text, image=self.mate_photo)
+            else:
+                # Make text bigger by increasing font size
+                new_font_size = int(self.original_font_size * 1.1)
+                self.canvas.itemconfig(self.button_text, font=('Segoe UI', new_font_size, 'bold'))
             self.root.config(cursor='hand2')
             
             # Animate extra buttons only if they're not already visible and not animating
@@ -745,8 +782,16 @@ class ELI5Overlay:
             center_y = main_button_y + int(config.BUTTON_SIZE * 1.15) // 2
             self.canvas.scale(self.button_circle, center_x, center_y, 1/1.1, 1/1.1)
             
-            # Restore text to original font size
-            self.canvas.itemconfig(self.button_text, font=('Segoe UI', self.original_font_size, 'bold'))
+            # Scale down text or image to original size
+            if self.is_image:
+                # Scale down image
+                original_size = int(config.BUTTON_SIZE * 0.4)
+                scaled_image = self.mate_image_original.resize((original_size, original_size), Image.Resampling.LANCZOS)
+                self.mate_photo = ImageTk.PhotoImage(scaled_image)
+                self.canvas.itemconfig(self.button_text, image=self.mate_photo)
+            else:
+                # Restore text to original font size
+                self.canvas.itemconfig(self.button_text, font=('Segoe UI', self.original_font_size, 'bold'))
             self.root.config(cursor='')
             
             # Hide pomodoro controls when menu collapses
@@ -777,16 +822,103 @@ class ELI5Overlay:
         # Move the entire button menu, keeping extra buttons in sync if visible
         # The canvas coordinates are relative, so they move automatically with the window
     
+    def on_extra_button_hover(self, event, index):
+        """Handle hover enter on extra buttons - grow the button and keep menu open"""
+        # IMPORTANT: Keep the menu open by canceling pending leave
+        self.cancel_leave(event)
+        
+        # Cancel any pending shrink for this button
+        if not hasattr(self, 'extra_button_shrink_timers'):
+            self.extra_button_shrink_timers = [None, None, None]
+        
+        if self.extra_button_shrink_timers[index]:
+            self.root.after_cancel(self.extra_button_shrink_timers[index])
+            self.extra_button_shrink_timers[index] = None
+        
+        # Track hover state to prevent multiple scaling
+        if not hasattr(self, 'extra_button_hover_state'):
+            self.extra_button_hover_state = [False, False, False]
+        
+        # Only scale if not already scaled
+        if not self.extra_button_hover_state[index]:
+            self.extra_button_hover_state[index] = True
+            
+            button = self.extra_buttons[index]
+            icon = self.extra_button_icons[index]
+            
+            # Get button center
+            coords = self.canvas.coords(button)
+            center_x = (coords[0] + coords[2]) / 2
+            center_y = (coords[1] + coords[3]) / 2
+            
+            # Scale button (smaller effect - 5% instead of 10%)
+            self.canvas.scale(button, center_x, center_y, 1.05, 1.05)
+            
+            # Scale icon (slightly increase font size)
+            # For Pomodoro button with active timer, keep the font smaller
+            if index == 2 and self.pomodoro_active:
+                self.canvas.itemconfig(icon, font=('Segoe UI', 9, 'bold'))  # 8 -> 9 (timer text)
+            else:
+                self.canvas.itemconfig(icon, font=('Segoe UI', 15))  # 14 -> 15 (regular icons)
+    
+    def on_extra_button_leave(self, event, index):
+        """Handle hover leave on extra buttons - shrink back and check if leaving menu"""
+        # IMPORTANT: Check if we're leaving the entire menu area
+        self.check_leave(event)
+        
+        if not hasattr(self, 'extra_button_hover_state'):
+            self.extra_button_hover_state = [False, False, False]
+            return
+        
+        if not hasattr(self, 'extra_button_shrink_timers'):
+            self.extra_button_shrink_timers = [None, None, None]
+        
+        # Don't do anything if not currently hovered
+        if not self.extra_button_hover_state[index]:
+            return
+        
+        # Delayed check to see if we really left
+        def check_and_shrink():
+            # Reset timer reference
+            self.extra_button_shrink_timers[index] = None
+            
+            # Shrink the button
+            self.extra_button_hover_state[index] = False
+            
+            button = self.extra_buttons[index]
+            icon = self.extra_button_icons[index]
+            
+            # Get button center
+            coords = self.canvas.coords(button)
+            if not coords:  # Button might be hidden
+                return
+                
+            center_x = (coords[0] + coords[2]) / 2
+            center_y = (coords[1] + coords[3]) / 2
+            
+            # Scale button back (1/1.05)
+            self.canvas.scale(button, center_x, center_y, 1/1.05, 1/1.05)
+            
+            # Restore icon font size
+            # For Pomodoro button with active timer, restore smaller font
+            if index == 2 and self.pomodoro_active:
+                self.canvas.itemconfig(icon, font=('Segoe UI', 8, 'bold'))  # Timer text
+            else:
+                self.canvas.itemconfig(icon, font=('Segoe UI', 14))  # Regular icons
+        
+        # Schedule shrink with delay - this will be cancelled if we re-enter
+        self.extra_button_shrink_timers[index] = self.root.after(150, check_and_shrink)
+    
     def on_extra_button_click(self, index):
         """Handle clicks on extra buttons"""
         print(f"Extra button {index} clicked")
         
         if index == 0:
-            # First button (📋) - Clipboard/Notes functionality (placeholder)
-            print("Clipboard button - not yet implemented")
+            # First button (➕) - Plus functionality (placeholder)
+            print("Plus button - not yet implemented")
         elif index == 1:
-            # Second button (🔍) - Search functionality (placeholder)
-            print("Search button - not yet implemented")
+            # Second button (🔍) - Magnifier: ELI5 text explanation
+            self.explain_selected_text()
         elif index == 2:
             # Third button (🍅) - Pomodoro timer
             if not self.pomodoro_active:
@@ -795,6 +927,57 @@ class ELI5Overlay:
             else:
                 # If already active, toggle play/pause
                 self.toggle_pomodoro()
+    
+    def explain_selected_text(self):
+        """Copy selected text and get ELI5 explanation from Claude"""
+        print("Magnifier button clicked - getting explanation...")
+        
+        # Store old clipboard content to detect changes
+        old_clipboard = ""
+        try:
+            old_clipboard = pyperclip.paste()
+            print(f"\nClipboard BEFORE Ctrl+C: '{old_clipboard}'")
+        except:
+            pass
+        
+        # Small delay to ensure click is processed
+        time.sleep(0.05)
+        
+        # Simulate Ctrl+C to copy selected text
+        print("Simulating Ctrl+C...")
+        pyautogui.hotkey('ctrl', 'c')
+        
+        # Wait longer for clipboard to update
+        time.sleep(0.2)
+        
+        # Get text from clipboard
+        try:
+            selected_text = pyperclip.paste()
+            print(f"Clipboard AFTER Ctrl+C: '{selected_text}'\n")
+        except Exception as e:
+            # Silently fail - don't show error
+            print(f"Could not get clipboard content: {e}")
+            return
+        
+        # If no text selected or clipboard unchanged, silently do nothing
+        if not selected_text or selected_text.strip() == "" or selected_text == old_clipboard:
+            print("No new text selected - ignoring click")
+            return
+        
+        # Check if API key is set
+        if not self.client or config.ANTHROPIC_API_KEY == "your-api-key-here":
+            print("API key not configured - please set your API key in config.py")
+            return
+        
+        # Show loading message
+        self.show_explanation("Generating explanation...", loading=True)
+        
+        # Call Claude API
+        try:
+            explanation = self.get_eli5_explanation(selected_text)
+            self.show_explanation(explanation)
+        except Exception as e:
+            self.show_explanation(f"Error calling Claude API: {str(e)}")
     
     def start_pomodoro(self):
         """Start the Pomodoro timer integrated into the button"""
@@ -807,7 +990,7 @@ class ELI5Overlay:
         self.canvas.itemconfig(
             self.extra_button_icons[2], 
             text=self.format_pomodoro_time(),
-            font=('Segoe UI', 10, 'bold')
+            font=('Segoe UI', 8, 'bold')
         )
         
         # Create control dots
@@ -1036,51 +1219,11 @@ class ELI5Overlay:
         if event and (abs(event.x - self.drag_start_x) > 5 or abs(event.y - self.drag_start_y) > 5):
             return
         
-        # Store old clipboard content to detect changes
-        old_clipboard = ""
-        try:
-            old_clipboard = pyperclip.paste()
-            print(f"\nClipboard BEFORE Ctrl+C: '{old_clipboard}'")
-        except:
-            pass
-        
-        # Small delay to ensure click is processed
-        time.sleep(0.05)
-        
-        # Simulate Ctrl+C to copy selected text
-        print("Simulating Ctrl+C...")
-        pyautogui.hotkey('ctrl', 'c')
-        
-        # Wait longer for clipboard to update
-        time.sleep(0.2)
-        
-        # Get text from clipboard
-        try:
-            selected_text = pyperclip.paste()
-            print(f"Clipboard AFTER Ctrl+C: '{selected_text}'\n")
-        except Exception as e:
-            # Silently fail - don't show error
-            return
-        
-        # If no text selected or clipboard unchanged, silently do nothing
-        if not selected_text or selected_text.strip() == "" or selected_text == old_clipboard:
-            print("No new text selected - ignoring click")
-            return
-        
-        # Check if API key is set
-        if not self.client or config.ANTHROPIC_API_KEY == "your-api-key-here":
-            print("API key not configured - ignoring click")
-            return
-        
-        # Show loading message
-        self.show_explanation("Generating explanation...", loading=True)
-        
-        # Call Claude API
-        try:
-            explanation = self.get_eli5_explanation(selected_text)
-            self.show_explanation(explanation)
-        except Exception as e:
-            self.show_explanation(f"Error calling Claude API: {str(e)}")
+        # Main button click - currently does nothing
+        # The hover functionality expands the menu with the extra buttons
+        # Text explanation functionality has been moved to the magnifier button
+        print("Main mate button clicked - hover to see options")
+        return
     
     def get_eli5_explanation(self, text):
         """Call Claude API to get ELI5 explanation"""
