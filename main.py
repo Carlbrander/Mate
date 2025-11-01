@@ -11,6 +11,7 @@ import webbrowser
 
 import signal
 import sys
+import threading
 from anthropic import Anthropic
 import config
 import ctypes
@@ -493,23 +494,23 @@ class ELI5Overlay:
         self.is_hovered = False
         self.leave_timer = None  # For delayed leave detection
         
-        # Extra button hover state tracking
-        self.extra_button_hover_state = [False, False, False]
-        self.extra_button_shrink_timers = [None, None, None]
-        
-        # Pomodoro timer state
-        self.pomodoro_active = False
-        self.pomodoro_running = False
-        self.pomodoro_is_break = False
-        self.pomodoro_seconds = 25 * 60  # 25 minutes for work
-        self.pomodoro_timer_id = None
-        self.pomodoro_control_dots = []  # Will store control dot canvas items
-        
-        # Speech bubble state
-        self.speech_bubble = None
-        
-        # Schedule speech bubble to appear after 3 seconds
-        self.root.after(3000, self.show_speech_bubble)
+        # Start context retrieval service in background
+        self.start_context_retrieval_service()
+    
+    def start_context_retrieval_service(self):
+        """Start context retrieval service in a background daemon thread"""
+        try:
+            print("Starting context retrieval service...")
+            service = ContextRetrievalService()
+            
+            # Start service in daemon thread (will stop when main app exits)
+            context_thread = threading.Thread(target=service.run, daemon=True)
+            context_thread.start()
+            
+            print("Context retrieval service started successfully")
+        except Exception as e:
+            print(f"Warning: Could not start context retrieval service: {e}")
+            print("Main app will continue without context retrieval")
     
     def ease_out_cubic(self, t):
         """Easing function for smooth deceleration"""
