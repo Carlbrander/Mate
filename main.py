@@ -1,13 +1,16 @@
 import tkinter as tk
 from tkinter import scrolledtext
+import customtkinter as ctk
 import pyperclip
 import pyautogui
 import time
+
 import signal
 import sys
 from anthropic import Anthropic
 import config
 import ctypes
+import re
 
 class ELI5Overlay:
     def __init__(self):
@@ -216,120 +219,201 @@ class ELI5Overlay:
         
         return response
     
+    def format_markdown_text(self, text_widget, markdown_text):
+        """Format markdown text in a CTkTextbox widget"""
+        # Configure text tags for different styles
+        text_widget.tag_config("h1", font=("Segoe UI", 20, "bold"), spacing1=10, spacing3=5)
+        text_widget.tag_config("h2", font=("Segoe UI", 17, "bold"), spacing1=8, spacing3=4)
+        text_widget.tag_config("h3", font=("Segoe UI", 15, "bold"), spacing1=6, spacing3=3)
+        text_widget.tag_config("bold", font=("Segoe UI", 13, "bold"))
+        text_widget.tag_config("italic", font=("Segoe UI", 13, "italic"))
+        text_widget.tag_config("code", font=("Consolas", 11), background="#f5f5f5", foreground="#d63384")
+        text_widget.tag_config("link", font=("Segoe UI", 13, "underline"), foreground="#0066cc")
+        text_widget.tag_config("bullet", font=("Segoe UI", 13))
+        
+        lines = markdown_text.split('\n')
+        current_pos = "1.0"
+        
+        for line in lines:
+            # Headers
+            if line.startswith('# '):
+                text = line[2:].strip() + '\n'
+                text_widget.insert(current_pos, text, "h1")
+            elif line.startswith('## '):
+                text = line[3:].strip() + '\n'
+                text_widget.insert(current_pos, text, "h2")
+            elif line.startswith('### '):
+                text = line[4:].strip() + '\n'
+                text_widget.insert(current_pos, text, "h3")
+            # Bullet points
+            elif line.startswith('- ') or line.startswith('* '):
+                text = '  • ' + line[2:].strip()
+                self._insert_formatted_line(text_widget, text + '\n', current_pos)
+            # Code blocks (simplified - just indent them)
+            elif line.startswith('```'):
+                continue  # Skip code block markers
+            # Normal line with inline formatting
+            else:
+                self._insert_formatted_line(text_widget, line + '\n', current_pos)
+            
+            current_pos = text_widget.index("end-1c")
+    
+    def _insert_formatted_line(self, text_widget, line, pos):
+        """Insert a line with inline markdown formatting (bold, italic, code, links)"""
+        # Process inline markdown
+        remaining = line
+        current_index = pos
+        
+        # Pattern for **bold**, *italic*, `code`, and [links](url)
+        pattern = r'(\*\*.*?\*\*|\*.*?\*|`.*?`|\[.*?\]\(.*?\))'
+        
+        parts = re.split(pattern, remaining)
+        
+        for part in parts:
+            if not part:
+                continue
+                
+            # Bold: **text**
+            if part.startswith('**') and part.endswith('**'):
+                text = part[2:-2]
+                text_widget.insert(current_index, text, "bold")
+            # Italic: *text*
+            elif part.startswith('*') and part.endswith('*') and not part.startswith('**'):
+                text = part[1:-1]
+                text_widget.insert(current_index, text, "italic")
+            # Code: `text`
+            elif part.startswith('`') and part.endswith('`'):
+                text = part[1:-1]
+                text_widget.insert(current_index, text, "code")
+            # Link: [text](url)
+            elif part.startswith('[') and '](' in part:
+                match = re.match(r'\[(.*?)\]\((.*?)\)', part)
+                if match:
+                    link_text = match.group(1)
+                    text_widget.insert(current_index, link_text, "link")
+                else:
+                    text_widget.insert(current_index, part)
+            # Normal text
+            else:
+                text_widget.insert(current_index, part)
+            
+            current_index = text_widget.index("end-1c")
+    
     def show_explanation(self, text, loading=False):
-        """Show explanation in a new window"""
+        """Show explanation in a new window with CustomTkinter"""
         # Close existing explanation window if any
         if self.explanation_window and self.explanation_window.winfo_exists():
             self.explanation_window.destroy()
         
-        # Create new explanation window
-        self.explanation_window = tk.Toplevel(self.root)
-        self.explanation_window.overrideredirect(True)  # Remove default border
+        # Create new explanation window with CustomTkinter
+        self.explanation_window = ctk.CTkToplevel(self.root)
+        self.explanation_window.title("")  # Empty title
         self.explanation_window.attributes('-topmost', True)
         
-        # Position in bottom right, above the button
+        # Calculate window size: smaller, 1/5 screen width, 3/5 screen height
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
-        x_position = screen_width - config.EXPLANATION_WINDOW_WIDTH - 20
-        y_position = screen_height - config.EXPLANATION_WINDOW_HEIGHT - 120
+        window_width = screen_width // 5  # Smaller width
+        window_height = int(screen_height * 0.6)  # 60% of screen height
+        
+        # Position: top-right corner with margin from edges
+        # Right side: offset from right edge
+        margin_right = 20
+        x_position = screen_width - window_width - margin_right
+        
+        # Top: offset from top edge
+        margin_top = 60  # Below top bar
+        y_position = margin_top
         
         self.explanation_window.geometry(
-            f"{config.EXPLANATION_WINDOW_WIDTH}x{config.EXPLANATION_WINDOW_HEIGHT}+{x_position}+{y_position}"
+            f"{window_width}x{window_height}+{x_position}+{y_position}"
         )
         
-        # Main container with padding for shadow effect
-        main_container = tk.Frame(self.explanation_window, bg='#f5f5f5')
-        main_container.pack(fill='both', expand=True)
+        # Configure window appearance
+        self.explanation_window.configure(fg_color="white")
         
-        # Inner frame with border for modern look
-        inner_frame = tk.Frame(
+        # Create main container with rounded corners
+        main_container = ctk.CTkFrame(
+            self.explanation_window,
+            fg_color="white",
+            corner_radius=20,
+            border_width=2,
+            border_color="#e0e0e0"
+        )
+        main_container.pack(fill='both', expand=True, padx=0, pady=0)
+        
+        # Modern header frame inside the rounded container
+        header_frame = ctk.CTkFrame(
             main_container,
-            bg='white',
-            highlightbackground='#e0e0e0',
-            highlightthickness=1
+            fg_color="white",
+            corner_radius=0,
+            height=70
         )
-        inner_frame.pack(fill='both', expand=True, padx=2, pady=2)
-        
-        # Modern header with gradient-like appearance
-        header_frame = tk.Frame(inner_frame, bg='white', height=70)
-        header_frame.pack(fill='x')
+        header_frame.pack(fill='x', padx=0, pady=0)
         header_frame.pack_propagate(False)
         
         # Title
-        title_label = tk.Label(
+        title_label = ctk.CTkLabel(
             header_frame,
             text="mate",
-            bg='white',
-            fg='#333333',
-            font=('Segoe UI', 18, 'bold')
+            text_color="#333333",
+            font=("Segoe UI", 18, "bold")
         )
         title_label.pack(side='left', padx=35, pady=20)
         
-        # Modern minimalist close button
-        close_button = tk.Label(
+        # Modern close button with hover effect
+        close_button = ctk.CTkButton(
             header_frame,
             text="×",
-            bg='white',
-            fg='#999999',
-            font=('Segoe UI', 28),
-            cursor='hand2',
-            padx=15
+            text_color="#999999",
+            fg_color="white",
+            hover_color="#f0f0f0",
+            font=("Segoe UI", 28),
+            width=50,
+            height=50,
+            corner_radius=25,
+            border_width=0,
+            command=self.explanation_window.destroy
         )
-        close_button.pack(side='right', padx=30)
-        close_button.bind('<Enter>', lambda e: close_button.config(fg='#333333', bg='#f0f0f0'))
-        close_button.bind('<Leave>', lambda e: close_button.config(fg='#999999', bg='white'))
-        close_button.bind('<Button-1>', lambda e: self.explanation_window.destroy())
+        close_button.pack(side='right', padx=30, pady=10)
         
         # Subtle divider line
-        divider = tk.Frame(inner_frame, bg='#e8e8e8', height=1)
+        divider = ctk.CTkFrame(main_container, fg_color="#e8e8e8", height=1)
         divider.pack(fill='x')
         
-        # Content frame with padding
-        content_frame = tk.Frame(inner_frame, bg='white')
-        content_frame.pack(fill='both', expand=True, padx=0, pady=0)
+        # Content frame for text widget
+        content_frame = tk.Frame(main_container, bg='white')
+        content_frame.pack(fill='both', expand=True, padx=40, pady=30)
         
-        # Create text widget with modern styling
-        text_widget = scrolledtext.ScrolledText(
+        # Use standard tkinter Text widget for markdown support (CustomTkinter doesn't support tag fonts)
+        text_widget = tk.Text(
             content_frame,
-            wrap=tk.WORD,
-            font=('Segoe UI', 13),
-            bg='white',
-            fg='#333333',
-            relief='flat',
-            padx=40,
-            pady=30,
-            spacing1=2,  # Space before paragraph
-            spacing2=1,  # Space between lines
-            spacing3=4,  # Space after paragraph
+            wrap="word",
+            font=("Segoe UI", 13),
+            bg="white",
+            fg="#333333",
+            relief="flat",
             borderwidth=0,
             highlightthickness=0,
+            padx=10,
+            pady=10,
             selectbackground='#667eea',
             selectforeground='white'
         )
-        text_widget.pack(fill='both', expand=True)
-        text_widget.insert('1.0', text)
         
-        # Style the scrollbar
-        try:
-            # Configure scrollbar colors if possible
-            text_widget.vbar.config(
-                bg='white',
-                troughcolor='#f5f5f5',
-                relief='flat',
-                width=16
-            )
-        except:
-            pass
+        # Add scrollbar
+        scrollbar = tk.Scrollbar(content_frame, command=text_widget.yview)
+        text_widget.configure(yscrollcommand=scrollbar.set)
         
-        if not loading:
+        scrollbar.pack(side='right', fill='y')
+        text_widget.pack(side='left', fill='both', expand=True)
+        
+        # Insert text with markdown formatting
+        if loading:
+            text_widget.insert('1.0', text)
+        else:
+            self.format_markdown_text(text_widget, text)
             text_widget.config(state='disabled')  # Make read-only
-        
-        # Add drop shadow effect (simulation with frames)
-        try:
-            # Windows shadow effect
-            self.explanation_window.attributes('-alpha', 0.98)
-        except:
-            pass
     
     def run(self):
         """Start the application"""

@@ -45,7 +45,7 @@ Please explain this in detail with examples."""
 
 ### 5. Run the Application
 ```powershell
-python mate.py
+python main.py
 ```
 
 The terminal will display:
@@ -55,10 +55,10 @@ The terminal will display:
 
 ## How to Use
 
-1. **Launch the app** - Run `python mate.py` and a purple-blue "mate" button will appear
+1. **Launch the app** - Run `python main.py` and a purple-blue "mate" button will appear in the bottom right
 2. **Select any text** - Highlight text anywhere on your computer (browser, Word, PDF, etc.)
 3. **Click the button** - Click the mate button to explain the selected text
-4. **Read explanation** - A large, modern window (1400x1400) will appear with the explanation
+4. **Read explanation** - A compact window with rounded corners appears in the top-right (1/5 width × 60% height)
 5. **Close** - Click the large X button in the top right to close the explanation window
 
 ## Features
@@ -68,7 +68,11 @@ The terminal will display:
 - **Smart Explanations**: 
   - Single words/short phrases: Gets a definition
   - Longer text: Gets a simplified version
-- **Modern UI**: Clean, minimalist explanation window with smooth hover effects
+- **Modern UI**: Clean, minimalist explanation window with **rounded corners** and smooth hover effects
+- **Responsive Sizing**: Compact window that scales to your screen resolution (1/5 width × 60% height)
+- **Smart Positioning**: Top-right corner placement with margins to prevent cutoff
+- **Markdown Support**: Full markdown rendering with headers, bold, italic, code, links, and bullet points
+- **Hybrid UI**: CustomTkinter for modern window styling + native Text widget for rich markdown formatting
 - **Customizable**: Edit `config.py` to change button size, prompts, and AI model
 
 ## Troubleshooting

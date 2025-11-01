@@ -20,7 +20,8 @@ Please provide a clear, simplified explanation of the above text. If it's a sing
 BUTTON_TEXT = "mate"
 BUTTON_SIZE = 160  # Circular button diameter
 
-# Window settings
-EXPLANATION_WINDOW_WIDTH = 1400  # Large width
-EXPLANATION_WINDOW_HEIGHT = 1400  # Large height
+# Window settings (Note: Window size is now calculated dynamically as 1/4 screen width × 1/2 screen height)
+# These values are kept for backward compatibility but not currently used
+EXPLANATION_WINDOW_WIDTH = 1400  # Not used - calculated dynamically
+EXPLANATION_WINDOW_HEIGHT = 1400  # Not used - calculated dynamically
 
