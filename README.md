@@ -30,10 +30,24 @@ Example:
 ANTHROPIC_API_KEY = "sk-ant-api03-..."
 ```
 
-### 4. (Optional) Customize the Prompt
-You can customize how Claude responds by editing `PROMPT_TEMPLATE` in `config.py`. The `{text}` placeholder will be replaced with your selected text.
+### 4. (Optional) Customize Settings
+You can customize the app behavior by editing `config.py`:
 
-Example:
+**Window Size**: Set minimum and maximum window dimensions
+```python
+WINDOW_MIN_WIDTH = 400   # Minimum window width
+WINDOW_MAX_WIDTH = 600   # Maximum window width
+WINDOW_MIN_HEIGHT = 200  # Minimum window height
+WINDOW_MAX_HEIGHT = 700  # Maximum window height
+```
+
+**Window Position**: Adjust where the explanation window appears (distance from bottom-right corner)
+```python
+WINDOW_MARGIN_RIGHT = 100  # Pixels from right edge
+WINDOW_MARGIN_BOTTOM = 200  # Pixels from bottom edge
+```
+
+**Prompt Template**: Customize how Claude responds
 ```python
 PROMPT_TEMPLATE = """You are a helpful coding assistant.
 
@@ -58,8 +72,8 @@ The terminal will display:
 1. **Launch the app** - Run `python main.py` and a purple-blue "mate" button will appear in the bottom right
 2. **Select any text** - Highlight text anywhere on your computer (browser, Word, PDF, etc.)
 3. **Click the button** - Click the mate button to explain the selected text
-4. **Read explanation** - A compact window with rounded corners appears in the top-right (1/5 width × 60% height)
-5. **Close** - Click the large X button in the top right to close the explanation window
+4. **Read explanation** - A compact window with rounded corners appears (position configurable in config.py)
+5. **Close** - Press Escape key or Alt+F4 to close the explanation window
 
 ## Features
 
@@ -69,8 +83,8 @@ The terminal will display:
   - Single words/short phrases: Gets a definition
   - Longer text: Gets a simplified version
 - **Modern UI**: Clean, minimalist explanation window with **rounded corners** and smooth hover effects
-- **Responsive Sizing**: Compact window that scales to your screen resolution (1/5 width × 60% height)
-- **Smart Positioning**: Top-right corner placement with margins to prevent cutoff
+- **Responsive Sizing**: Window automatically adapts to content size (configurable min/max bounds)
+- **Configurable Positioning**: Adjust window position via `WINDOW_MARGIN_RIGHT` and `WINDOW_MARGIN_BOTTOM` in config.py
 - **Markdown Support**: Full markdown rendering with headers, bold, italic, code, links, and bullet points
 - **Hybrid UI**: CustomTkinter for modern window styling + native Text widget for rich markdown formatting
 - **Customizable**: Edit `config.py` to change button size, prompts, and AI model

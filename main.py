@@ -34,7 +34,9 @@ class ELI5Overlay:
         x_position = screen_width - config.BUTTON_SIZE - 100  # More towards center
         y_position = screen_height - config.BUTTON_SIZE - 150  # Higher up
         
-        self.root.geometry(f"{config.BUTTON_SIZE}x{config.BUTTON_SIZE}+{x_position}+{y_position}")
+        # Window size needs to accommodate canvas with extra space for hover
+        window_size = int(config.BUTTON_SIZE * 1.15)
+        self.root.geometry(f"{window_size}x{window_size}+{x_position}+{y_position}")
         
         # Make window not steal focus on Windows using WinAPI
         self.root.update_idletasks()  # Ensure window is created
@@ -48,39 +50,34 @@ class ELI5Overlay:
         except Exception as e:
             print(f"Note: Could not set no-activate style: {e}")
         
-        # Create circular button using Canvas
+        # Create circular button using Canvas - add extra space for hover growth
+        canvas_size = int(config.BUTTON_SIZE * 1.15)  # 15% larger to accommodate 10% growth
         self.canvas = tk.Canvas(
             self.root,
-            width=config.BUTTON_SIZE,
-            height=config.BUTTON_SIZE,
+            width=canvas_size,
+            height=canvas_size,
             bg=transparent_color,
             highlightthickness=0
         )
         self.canvas.pack()
         
-        # Draw circular button with gradient-like effect
+        # Draw circular button centered with padding for growth
+        padding = (canvas_size - config.BUTTON_SIZE) // 2
         self.button_circle = self.canvas.create_oval(
-            5, 5, config.BUTTON_SIZE - 5, config.BUTTON_SIZE - 5,
+            padding, padding, 
+            canvas_size - padding, canvas_size - padding,
             fill='#667eea',  # Modern purple-blue gradient
-            outline='#764ba2',
-            width=3
+            outline='',
+            width=0
         )
         
-        # Add shadow effect (another circle slightly offset)
-        self.shadow = self.canvas.create_oval(
-            8, 8, config.BUTTON_SIZE - 2, config.BUTTON_SIZE - 2,
-            fill='',
-            outline='#5568d3',
-            width=1
-        )
-        self.canvas.tag_lower(self.shadow)
-        
-        # Add text
+        # Add text centered
+        self.original_font_size = 12
         self.button_text = self.canvas.create_text(
-            config.BUTTON_SIZE // 2,
-            config.BUTTON_SIZE // 2,
+            canvas_size // 2,
+            canvas_size // 2,
             text=config.BUTTON_TEXT,
-            font=('Segoe UI', 12, 'bold'),
+            font=('Segoe UI', self.original_font_size, 'bold'),
             fill='white'
         )
         
@@ -112,16 +109,36 @@ class ELI5Overlay:
         self.drag_start_x = 0
         self.drag_start_y = 0
         self.is_dragging = False
+        self.is_hovered = False
     
     def on_hover(self, event):
-        """Button hover effect"""
-        self.canvas.itemconfig(self.button_circle, fill='#764ba2')
-        self.root.config(cursor='hand2')
+        """Button hover effect - grow size"""
+        if not self.is_hovered:
+            self.is_hovered = True
+            # Scale up the button by 10% from center
+            canvas_size = int(config.BUTTON_SIZE * 1.15)
+            center_x = canvas_size // 2
+            center_y = canvas_size // 2
+            self.canvas.scale(self.button_circle, center_x, center_y, 1.1, 1.1)
+            
+            # Make text bigger by increasing font size
+            new_font_size = int(self.original_font_size * 1.1)
+            self.canvas.itemconfig(self.button_text, font=('Segoe UI', new_font_size, 'bold'))
+            self.root.config(cursor='hand2')
     
     def on_leave(self, event):
-        """Button leave effect"""
-        self.canvas.itemconfig(self.button_circle, fill='#667eea')
-        self.root.config(cursor='')
+        """Button leave effect - shrink back"""
+        if self.is_hovered:
+            self.is_hovered = False
+            # Scale button back down to original size
+            canvas_size = int(config.BUTTON_SIZE * 1.15)
+            center_x = canvas_size // 2
+            center_y = canvas_size // 2
+            self.canvas.scale(self.button_circle, center_x, center_y, 1/1.1, 1/1.1)
+            
+            # Restore text to original font size
+            self.canvas.itemconfig(self.button_text, font=('Segoe UI', self.original_font_size, 'bold'))
+            self.root.config(cursor='')
     
     def start_drag(self, event):
         self.drag_start_x = event.x
@@ -166,16 +183,17 @@ class ELI5Overlay:
             selected_text = pyperclip.paste()
             print(f"Clipboard AFTER Ctrl+C: '{selected_text}'\n")
         except Exception as e:
-            self.show_explanation(f"Error reading clipboard: {str(e)}")
+            # Silently fail - don't show error
             return
         
-        if not selected_text or selected_text.strip() == "":
-            self.show_explanation("No text selected. Please select some text and try again.")
+        # If no text selected or clipboard unchanged, silently do nothing
+        if not selected_text or selected_text.strip() == "" or selected_text == old_clipboard:
+            print("No new text selected - ignoring click")
             return
         
         # Check if API key is set
         if not self.client or config.ANTHROPIC_API_KEY == "your-api-key-here":
-            self.show_explanation("Please set your Anthropic API key in config.py")
+            print("API key not configured - ignoring click")
             return
         
         # Show loading message
@@ -221,15 +239,15 @@ class ELI5Overlay:
     
     def format_markdown_text(self, text_widget, markdown_text):
         """Format markdown text in a CTkTextbox widget"""
-        # Configure text tags for different styles
-        text_widget.tag_config("h1", font=("Segoe UI", 20, "bold"), spacing1=10, spacing3=5)
-        text_widget.tag_config("h2", font=("Segoe UI", 17, "bold"), spacing1=8, spacing3=4)
-        text_widget.tag_config("h3", font=("Segoe UI", 15, "bold"), spacing1=6, spacing3=3)
-        text_widget.tag_config("bold", font=("Segoe UI", 13, "bold"))
-        text_widget.tag_config("italic", font=("Segoe UI", 13, "italic"))
-        text_widget.tag_config("code", font=("Consolas", 11), background="#f5f5f5", foreground="#d63384")
-        text_widget.tag_config("link", font=("Segoe UI", 13, "underline"), foreground="#0066cc")
-        text_widget.tag_config("bullet", font=("Segoe UI", 13))
+        # Configure text tags for different styles (smaller sizes)
+        text_widget.tag_config("h1", font=("Segoe UI", 14, "bold"), spacing1=6, spacing3=3)
+        text_widget.tag_config("h2", font=("Segoe UI", 12, "bold"), spacing1=5, spacing3=2)
+        text_widget.tag_config("h3", font=("Segoe UI", 11, "bold"), spacing1=4, spacing3=2)
+        text_widget.tag_config("bold", font=("Segoe UI", 10, "bold"))
+        text_widget.tag_config("italic", font=("Segoe UI", 10, "italic"))
+        text_widget.tag_config("code", font=("Consolas", 9), background="#f5f5f5", foreground="#d63384")
+        text_widget.tag_config("link", font=("Segoe UI", 10, "underline"), foreground="#0066cc")
+        text_widget.tag_config("bullet", font=("Segoe UI", 10))
         
         lines = markdown_text.split('\n')
         current_pos = "1.0"
@@ -310,95 +328,62 @@ class ELI5Overlay:
         self.explanation_window.title("")  # Empty title
         self.explanation_window.attributes('-topmost', True)
         
-        # Calculate window size: smaller, 1/5 screen width, 3/5 screen height
+        # Calculate initial window size (will adjust to content)
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
-        window_width = screen_width // 5  # Smaller width
-        window_height = int(screen_height * 0.6)  # 60% of screen height
         
-        # Position: top-right corner with margin from edges
-        # Right side: offset from right edge
-        margin_right = 20
-        x_position = screen_width - window_width - margin_right
+        # Start with default size from config
+        initial_width = config.WINDOW_MIN_WIDTH
+        initial_height = config.WINDOW_MIN_HEIGHT
         
-        # Top: offset from top edge
-        margin_top = 60  # Below top bar
-        y_position = margin_top
+        # Position: calculated from bottom-right corner using config margins
+        # x_position = screen_width - window_width - margin_from_right
+        # y_position = screen_height - window_height - margin_from_bottom
+        x_position = screen_width - initial_width - config.WINDOW_MARGIN_RIGHT
+        y_position = screen_height - initial_height - config.WINDOW_MARGIN_BOTTOM
         
         self.explanation_window.geometry(
-            f"{window_width}x{window_height}+{x_position}+{y_position}"
+            f"{initial_width}x{initial_height}+{x_position}+{y_position}"
         )
         
         # Configure window appearance
         self.explanation_window.configure(fg_color="white")
         
-        # Create main container with rounded corners
+        # Create main container with rounded corners (no header)
         main_container = ctk.CTkFrame(
             self.explanation_window,
             fg_color="white",
-            corner_radius=20,
+            corner_radius=15,
             border_width=2,
             border_color="#e0e0e0"
         )
         main_container.pack(fill='both', expand=True, padx=0, pady=0)
         
-        # Modern header frame inside the rounded container
-        header_frame = ctk.CTkFrame(
-            main_container,
-            fg_color="white",
-            corner_radius=0,
-            height=70
-        )
-        header_frame.pack(fill='x', padx=0, pady=0)
-        header_frame.pack_propagate(False)
+        # Bind Escape key to close window
+        self.explanation_window.bind('<Escape>', lambda e: self.explanation_window.destroy())
+        # Allow clicking window to close it (optional - uncomment if desired)
+        # main_container.bind('<Button-1>', lambda e: self.explanation_window.destroy())
         
-        # Title
-        title_label = ctk.CTkLabel(
-            header_frame,
-            text="mate",
-            text_color="#333333",
-            font=("Segoe UI", 18, "bold")
-        )
-        title_label.pack(side='left', padx=35, pady=20)
-        
-        # Modern close button with hover effect
-        close_button = ctk.CTkButton(
-            header_frame,
-            text="×",
-            text_color="#999999",
-            fg_color="white",
-            hover_color="#f0f0f0",
-            font=("Segoe UI", 28),
-            width=50,
-            height=50,
-            corner_radius=25,
-            border_width=0,
-            command=self.explanation_window.destroy
-        )
-        close_button.pack(side='right', padx=30, pady=10)
-        
-        # Subtle divider line
-        divider = ctk.CTkFrame(main_container, fg_color="#e8e8e8", height=1)
-        divider.pack(fill='x')
-        
-        # Content frame for text widget
+        # Content frame for text widget (no header, just content)
         content_frame = tk.Frame(main_container, bg='white')
-        content_frame.pack(fill='both', expand=True, padx=40, pady=30)
+        content_frame.pack(fill='both', expand=True, padx=20, pady=20)
         
         # Use standard tkinter Text widget for markdown support (CustomTkinter doesn't support tag fonts)
         text_widget = tk.Text(
             content_frame,
             wrap="word",
-            font=("Segoe UI", 13),
+            font=("Segoe UI", 10),
             bg="white",
             fg="#333333",
             relief="flat",
             borderwidth=0,
             highlightthickness=0,
-            padx=10,
-            pady=10,
+            padx=15,
+            pady=15,
             selectbackground='#667eea',
-            selectforeground='white'
+            selectforeground='white',
+            width=50,
+            height=15
         )
         
         # Add scrollbar
@@ -414,6 +399,23 @@ class ELI5Overlay:
         else:
             self.format_markdown_text(text_widget, text)
             text_widget.config(state='disabled')  # Make read-only
+            
+            # Update window to fit content
+            self.explanation_window.update_idletasks()
+            
+            # Calculate required size based on text content
+            text_widget.update_idletasks()
+            
+            # Get number of lines and adjust window size accordingly
+            num_lines = int(text_widget.index('end-1c').split('.')[0])
+            content_width = max(config.WINDOW_MIN_WIDTH, min(config.WINDOW_MAX_WIDTH, text_widget.winfo_reqwidth()))
+            content_height = max(config.WINDOW_MIN_HEIGHT, min(config.WINDOW_MAX_HEIGHT, num_lines * 18 + 60))  # Line height + padding
+            
+            # Recalculate position with actual content size using config margins
+            x_position = screen_width - content_width - config.WINDOW_MARGIN_RIGHT
+            y_position = screen_height - content_height - config.WINDOW_MARGIN_BOTTOM
+            
+            self.explanation_window.geometry(f"{content_width}x{content_height}+{x_position}+{y_position}")
     
     def run(self):
         """Start the application"""

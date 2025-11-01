@@ -4,7 +4,7 @@
 ANTHROPIC_API_KEY = open("api_key/api_key.txt", "r").read().strip()
 
 # Claude model to use
-CLAUDE_MODEL = "claude-sonnet-4-5"
+CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
 # Prompt settings
 # {text} will be replaced with the selected text
@@ -20,8 +20,19 @@ Please provide a clear, simplified explanation of the above text. If it's a sing
 BUTTON_TEXT = "mate"
 BUTTON_SIZE = 160  # Circular button diameter
 
-# Window settings (Note: Window size is now calculated dynamically as 1/4 screen width × 1/2 screen height)
-# These values are kept for backward compatibility but not currently used
-EXPLANATION_WINDOW_WIDTH = 1400  # Not used - calculated dynamically
-EXPLANATION_WINDOW_HEIGHT = 1400  # Not used - calculated dynamically
+# Window settings
+# Window size adapts to content but respects min/max bounds
+
+# Window size constraints
+WINDOW_MIN_WIDTH = 300  # Minimum window width in pixels
+WINDOW_MAX_WIDTH = 500  # Maximum window width in pixels
+WINDOW_MIN_HEIGHT = 200  # Minimum window height in pixels
+
+WINDOW_MAX_HEIGHT = 700  # Maximum window height in pixels
+
+# Window positioning - distance from bottom-right corner of screen
+WINDOW_MARGIN_RIGHT = 1100  # Pixels from right edge of screen
+
+
+WINDOW_MARGIN_BOTTOM = 1000  # Pixels from bottom edge of screen
 
