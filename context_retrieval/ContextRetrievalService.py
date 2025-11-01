@@ -123,6 +123,7 @@ class ContextRetrievalService:
                 context_path = self.context_manager.save_context(context_xml)
                 if context_path:
                     self.logger.info(f"Context saved to: {context_path}")
+                    return context_xml
             else:
                 self.logger.warning("Failed to extract context from screenshot")
             

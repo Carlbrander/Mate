@@ -1,7 +1,7 @@
 # Configuration file for Context Retrieval Module
 
 # Screenshot capture settings
-SCREENSHOT_INTERVAL = 50  # Interval between screenshots in seconds
+SCREENSHOT_INTERVAL = 30  # Interval between screenshots in seconds
 
 # API settings
 # The API key is loaded from the parent directory's api_key folder
@@ -12,20 +12,18 @@ API_KEY_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "api_key
 CLAUDE_MODEL = "claude-haiku-4-5"
 
 # Maximum tokens for API response
-MAX_TOKENS = 2000
+MAX_TOKENS = 1500
 
 # Prompt template for image analysis
 ANALYSIS_PROMPT = """Analyze the provided screenshot, which contains multiple tabs (e.g., website or app interface). Generate an XML structure that organizes each tab's content, including:
 
-Tab Name: The name of the tab (e.g., "Home", "Settings").
+Tab Name: The main content of the tab in a few words
 
 Context: A brief description of the tab's purpose (e.g., "Main dashboard", "Settings page for user preferences").
 
-Text Content: Extract and summarize all visible text in the tab, including headings, body text, and buttons, with brief context for each.
+Text Content: Extract and summarize all visible text in the tab. 
 
-Image Content: Describe key images or visual elements, explaining their role (e.g., icons, logos, charts).
-
-Layout (optional): A brief description of the tab's layout (e.g., grid, sidebar).
+Image Content: Describe key images or visual elements, explaining their role
 
 Return the output in the following XML format:
 
@@ -33,10 +31,7 @@ Return the output in the following XML format:
     <Name>Tab Name</Name>
     <Context>Tab description</Context>
     <TextContent>
-        <TextElement>
-            <Content>Extracted text</Content>
-            <Description>Text purpose or meaning</Description>
-        </TextElement>
+        Extracted text content
     </TextContent>
     <ImageContent>
         <Image>
@@ -44,12 +39,12 @@ Return the output in the following XML format:
             <Role>Image role</Role>
         </Image>
     </ImageContent>
-    <Layout>
-        <LayoutDescription>Layout description</LayoutDescription>
-    </Layout>
 </Tab>
 
-Ensure the XML is organized by tab and clearly describes both text and images for each section of the screenshot."""
+Ensure the XML is organized by tab and clearly describes both text and images for each section of the screenshot.
+do not include other xml tags than the ones specified.
+Be concise and to the point. Dont provide more than 1000 tokens.
+Ignore ads and other non-content elements. """
 
 # Storage settings
 SAVE_SCREENSHOTS = False  # Whether to save screenshots to disk
