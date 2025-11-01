@@ -7,10 +7,14 @@ import time
 
 import signal
 import sys
+import threading
 from anthropic import Anthropic
 import config
 import ctypes
 import re
+
+# Import context retrieval service
+from context_retrieval.ContextRetrievalService import ContextRetrievalService
 
 class ELI5Overlay:
     def __init__(self):
@@ -167,6 +171,24 @@ class ELI5Overlay:
         self.is_dragging = False
         self.is_hovered = False
         self.leave_timer = None  # For delayed leave detection
+        
+        # Start context retrieval service in background
+        self.start_context_retrieval_service()
+    
+    def start_context_retrieval_service(self):
+        """Start context retrieval service in a background daemon thread"""
+        try:
+            print("Starting context retrieval service...")
+            service = ContextRetrievalService()
+            
+            # Start service in daemon thread (will stop when main app exits)
+            context_thread = threading.Thread(target=service.run, daemon=True)
+            context_thread.start()
+            
+            print("Context retrieval service started successfully")
+        except Exception as e:
+            print(f"Warning: Could not start context retrieval service: {e}")
+            print("Main app will continue without context retrieval")
     
     def ease_out_cubic(self, t):
         """Easing function for smooth deceleration"""

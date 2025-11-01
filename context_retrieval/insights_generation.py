@@ -1,8 +1,13 @@
 import json
+import os
+import sys
 
 from dataclasses import dataclass
 
 from anthropic import Anthropic
+
+# Add parent directory to path to import main config
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config
 
@@ -51,8 +56,12 @@ def generate_links(learning_objective: str, context: str) -> list[str] | None:
     if raw_output is None:
         return None
     try:
-        return Insights(**json.loads(raw_output))
-    except json.JSONDecodeError:
+        data = json.loads(raw_output)
+        # Convert link dictionaries to Link objects
+        if 'links' in data and isinstance(data['links'], list):
+            data['links'] = [Link(**link) if isinstance(link, dict) else link for link in data['links']]
+        return Insights(**data)
+    except (json.JSONDecodeError, TypeError):
         return None
 
 def generate_insights(learning_objective: str, context: str) -> Insights | None:
@@ -87,6 +96,10 @@ def generate_insights(learning_objective: str, context: str) -> Insights | None:
     if raw_output is None:
         return None
     try:
-        return Insights(**json.loads(raw_output))
-    except json.JSONDecodeError:
+        data = json.loads(raw_output)
+        # Convert link dictionaries to Link objects
+        if 'links' in data and isinstance(data['links'], list):
+            data['links'] = [Link(**link) if isinstance(link, dict) else link for link in data['links']]
+        return Insights(**data)
+    except (json.JSONDecodeError, TypeError):
         return None

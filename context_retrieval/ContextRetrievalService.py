@@ -19,6 +19,8 @@ from context_retrieval import config
 from context_retrieval.screenshot_capture import ScreenshotCapture
 from context_retrieval.claude_analyzer import ClaudeAnalyzer
 from context_retrieval.context_manager import ContextManager
+from context_retrieval.shared_queue import links_queue
+from context_retrieval.insights_generation import generate_links
 
 
 class ContextRetrievalService:
@@ -57,8 +59,14 @@ class ContextRetrievalService:
             save_contexts=config.SAVE_CONTEXTS
         )
         
+        # Track latest context and link generation timing
+        self.latest_context = None
+        self.last_link_generation = 0
+        self.link_generation_interval = 60  # Generate links every 60 seconds
+        
         self.logger.info("Context Retrieval Service initialized")
         self.logger.info(f"Screenshot interval: {config.SCREENSHOT_INTERVAL} seconds")
+        self.logger.info(f"Link generation interval: {self.link_generation_interval} seconds")
     
     def setup_logging(self):
         """Setup logging configuration"""
@@ -112,6 +120,9 @@ class ContextRetrievalService:
             context_xml = self.claude_analyzer.analyze_screenshot(screenshot)
             
             if context_xml:
+                # Store context for link generation
+                self.latest_context = context_xml
+                
                 # Print context to console
                 print("\n" + "=" * 60)
                 print("EXTRACTED CONTEXT:")
@@ -133,6 +144,44 @@ class ContextRetrievalService:
         except Exception as e:
             self.logger.error(f"Error processing screenshot: {e}", exc_info=True)
     
+    def generate_links_if_needed(self):
+        """Generate links every minute if we have context"""
+        current_time = time.time()
+        
+        # Check if it's time to generate links and we have context
+        if (current_time - self.last_link_generation >= self.link_generation_interval 
+            and self.latest_context):
+            
+            try:
+                self.logger.info("Generating links from context...")
+                
+                # Use a generic learning objective
+                learning_objective = "User's current learning context from screen"
+                
+                # Generate links using the function from insights_generation.py
+                insights = generate_links(learning_objective, self.latest_context)
+                
+                if insights and insights.links:
+                    # Put links in the queue (overwrites old entry if full)
+                    links_queue.put(insights.links)
+                    self.logger.info(f"Generated {len(insights.links)} links and added to queue")
+                    
+                    # Print links to console
+                    print("\n" + "=" * 60)
+                    print("GENERATED LINKS:")
+                    print("=" * 60)
+                    for i, link in enumerate(insights.links, 1):
+                        print(f"{i}. {link.summary}")
+                        print(f"   URL: {link.url}")
+                    print("=" * 60 + "\n")
+                else:
+                    self.logger.warning("Failed to generate links")
+                
+                self.last_link_generation = current_time
+                
+            except Exception as e:
+                self.logger.error(f"Error generating links: {e}", exc_info=True)
+    
     def run(self):
         """Run the context retrieval service"""
         self.running = True
@@ -150,6 +199,9 @@ class ContextRetrievalService:
                 
                 # Process screenshot
                 self.process_screenshot()
+                
+                # Check if we should generate links
+                self.generate_links_if_needed()
                 
         except KeyboardInterrupt:
             self.logger.info("\nReceived shutdown signal")
