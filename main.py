@@ -7,6 +7,7 @@ import time
 import math
 import os
 from PIL import Image, ImageTk
+import webbrowser
 
 import signal
 import sys
@@ -211,7 +212,7 @@ def show_study_topic_dialog():
         height=45,
         corner_radius=10,
         border_width=2,
-        border_color="#667eea",
+        border_color="#537D5D",
         fg_color="white",
         text_color="#333333"
     )
@@ -234,8 +235,8 @@ def show_study_topic_dialog():
         width=45,
         height=45,
         corner_radius=10,
-        fg_color="#667eea",
-        hover_color="#764ba2",
+        fg_color="#537D5D",
+        hover_color="#73946B",
         command=submit_topic
     )
     checkmark_button.pack(side='right')
@@ -361,7 +362,7 @@ class ELI5Overlay:
         self.button_circle = self.canvas.create_oval(
             button_left, main_button_y + padding, 
             button_right, main_button_y + int(config.BUTTON_SIZE * 1.15) - padding,
-            fill='#667eea',  # Modern purple-blue gradient
+            fill='#537D5D',  # Darkest green
             outline='',
             width=0
         )
@@ -398,7 +399,7 @@ class ELI5Overlay:
         # Create 3 additional smaller buttons (initially hidden at main button position)
         self.extra_buttons = []
         self.extra_button_icons = []
-        button_colors = ['#764ba2', '#f093fb', '#4facfe']  # Different gradient colors
+        button_colors = ['#73946B', '#9EBC8A', '#D2D0A0']  # Green gradient colors
         button_icons = ['➕', '🔍', '🍅']  # Icons: plus, magnifier, tomato (pomodoro)
         
         for i in range(3):
@@ -503,6 +504,12 @@ class ELI5Overlay:
         self.pomodoro_seconds = 25 * 60  # 25 minutes for work
         self.pomodoro_timer_id = None
         self.pomodoro_control_dots = []  # Will store control dot canvas items
+        
+        # Speech bubble state
+        self.speech_bubble = None
+        
+        # Schedule speech bubble to appear after 3 seconds
+        self.root.after(3000, self.show_speech_bubble)
     
     def ease_out_cubic(self, t):
         """Easing function for smooth deceleration"""
@@ -930,15 +937,17 @@ class ELI5Overlay:
     
     def explain_selected_text(self):
         """Copy selected text and get ELI5 explanation from Claude"""
-        print("Magnifier button clicked - getting explanation...")
+        print("\n" + "="*60)
+        print("MAGNIFIER BUTTON CLICKED - STARTING ELI5 PROCESS")
+        print("="*60)
         
         # Store old clipboard content to detect changes
         old_clipboard = ""
         try:
             old_clipboard = pyperclip.paste()
-            print(f"\nClipboard BEFORE Ctrl+C: '{old_clipboard}'")
-        except:
-            pass
+            print(f"Clipboard BEFORE Ctrl+C: '{old_clipboard}'")
+        except Exception as e:
+            print(f"Error reading clipboard: {e}")
         
         # Small delay to ensure click is processed
         time.sleep(0.05)
@@ -965,8 +974,14 @@ class ELI5Overlay:
             return
         
         # Check if API key is set
-        if not self.client or config.ANTHROPIC_API_KEY == "your-api-key-here":
-            print("API key not configured - please set your API key in config.py")
+        try:
+            if not self.client:
+                print("API key not configured - please set your API key in config.py")
+                self.show_explanation("Error: API key not configured. Please add your Anthropic API key to api_key/api_key.txt", loading=False)
+                return
+        except Exception as e:
+            print(f"Error checking API client: {e}")
+            self.show_explanation(f"Error: Could not access API key. {str(e)}", loading=False)
             return
         
         # Show loading message
@@ -974,10 +989,15 @@ class ELI5Overlay:
         
         # Call Claude API
         try:
+            print(f"Calling Claude API with {len(selected_text)} characters of text...")
             explanation = self.get_eli5_explanation(selected_text)
+            print(f"Got explanation with {len(explanation)} characters")
             self.show_explanation(explanation)
+            print("Successfully displayed explanation window")
         except Exception as e:
-            self.show_explanation(f"Error calling Claude API: {str(e)}")
+            error_msg = f"Error calling Claude API: {str(e)}"
+            print(f"ERROR: {error_msg}")
+            self.show_explanation(error_msg)
     
     def start_pomodoro(self):
         """Start the Pomodoro timer integrated into the button"""
@@ -1033,7 +1053,7 @@ class ELI5Overlay:
             angles = [30, 90, 150]  # Bottom-right, bottom, bottom-left
         
         # Colors matching the app theme (similar to other buttons)
-        colors = ['#667eea', '#764ba2', '#f093fb']  # Blue, Purple, Pink
+        colors = ['#537D5D', '#73946B', '#9EBC8A']  # Green gradient
         icons = ['▶', '❚❚', '↻']  # Play, Pause (vertical bars), Reset (circular arrow)
         
         for i, angle in enumerate(angles):
@@ -1144,8 +1164,8 @@ class ELI5Overlay:
             self.pomodoro_seconds = 5 * 60  # 5 minute break
             self.pomodoro_running = True
             
-            # Change button color to green
-            self.canvas.itemconfig(self.extra_buttons[2], fill='#4CAF50')
+            # Change button color to lightest green for break time
+            self.canvas.itemconfig(self.extra_buttons[2], fill='#D2D0A0')
             
             # Update display and continue
             self.canvas.itemconfig(self.extra_button_icons[2], text=self.format_pomodoro_time())
@@ -1157,7 +1177,7 @@ class ELI5Overlay:
             self.pomodoro_running = False
             
             # Change button color back
-            self.canvas.itemconfig(self.extra_buttons[2], fill='#4facfe')
+            self.canvas.itemconfig(self.extra_buttons[2], fill='#D2D0A0')
             
             # Update display
             self.canvas.itemconfig(self.extra_button_icons[2], text=self.format_pomodoro_time())
@@ -1204,7 +1224,7 @@ class ELI5Overlay:
         )
         
         # Restore original color
-        self.canvas.itemconfig(self.extra_buttons[2], fill='#4facfe')
+        self.canvas.itemconfig(self.extra_buttons[2], fill='#D2D0A0')
         
         # Hide control dots
         self.hide_pomodoro_controls()
@@ -1258,15 +1278,15 @@ class ELI5Overlay:
     
     def format_markdown_text(self, text_widget, markdown_text):
         """Format markdown text in a CTkTextbox widget"""
-        # Configure text tags for different styles (smaller sizes)
-        text_widget.tag_config("h1", font=("Segoe UI", 14, "bold"), spacing1=6, spacing3=3)
-        text_widget.tag_config("h2", font=("Segoe UI", 12, "bold"), spacing1=5, spacing3=2)
-        text_widget.tag_config("h3", font=("Segoe UI", 11, "bold"), spacing1=4, spacing3=2)
-        text_widget.tag_config("bold", font=("Segoe UI", 10, "bold"))
-        text_widget.tag_config("italic", font=("Segoe UI", 10, "italic"))
-        text_widget.tag_config("code", font=("Consolas", 9), background="#f5f5f5", foreground="#d63384")
-        text_widget.tag_config("link", font=("Segoe UI", 10, "underline"), foreground="#0066cc")
-        text_widget.tag_config("bullet", font=("Segoe UI", 10))
+        # Configure text tags for different styles (white text on green background)
+        text_widget.tag_config("h1", font=("Segoe UI", 14, "bold"), spacing1=6, spacing3=3, foreground="white")
+        text_widget.tag_config("h2", font=("Segoe UI", 12, "bold"), spacing1=5, spacing3=2, foreground="white")
+        text_widget.tag_config("h3", font=("Segoe UI", 11, "bold"), spacing1=4, spacing3=2, foreground="white")
+        text_widget.tag_config("bold", font=("Segoe UI", 10, "bold"), foreground="white")
+        text_widget.tag_config("italic", font=("Segoe UI", 10, "italic"), foreground="white")
+        text_widget.tag_config("code", font=("Consolas", 9), background="#73946B", foreground="#D2D0A0")
+        text_widget.tag_config("link", font=("Segoe UI", 10, "underline"), foreground="#D2D0A0")
+        text_widget.tag_config("bullet", font=("Segoe UI", 10), foreground="white")
         
         lines = markdown_text.split('\n')
         current_pos = "1.0"
@@ -1336,148 +1356,295 @@ class ELI5Overlay:
             
             current_index = text_widget.index("end-1c")
     
-    def show_explanation(self, text, loading=False):
-        """Show explanation in a new window with CustomTkinter"""
-        # Close existing explanation window if any
-        if self.explanation_window and self.explanation_window.winfo_exists():
-            self.explanation_window.destroy()
+    def show_speech_bubble(self):
+        """Show a speech bubble with text and a link"""
+        # Close existing speech bubble if any
+        if self.speech_bubble and self.speech_bubble.winfo_exists():
+            self.speech_bubble.destroy()
         
-        # Create new explanation window with CustomTkinter
+        # Create speech bubble window with CustomTkinter
+        self.speech_bubble = ctk.CTkToplevel(self.root)
+        self.speech_bubble.title("")
+        self.speech_bubble.attributes('-topmost', True)
+        
+        # Remove title bar
+        self.speech_bubble.overrideredirect(True)
+        
+        # Make background transparent
+        transparent_bg = '#010101'
+        self.speech_bubble.configure(fg_color=transparent_bg)
+        self.speech_bubble.wm_attributes('-transparentcolor', transparent_bg)
+        
+        # Position so bottom-right of bubble aligns with top-left of main button
+        # First, update to get accurate button window position
+        self.root.update_idletasks()
+        button_window_x = self.root.winfo_x()
+        button_window_y = self.root.winfo_y()
+        
+        bubble_width = 280
+        bubble_height = 100
+        
+        # Calculate the top-left position of the main button circle within the window
+        canvas_height = int(config.BUTTON_SIZE * 5)
+        horizontal_offset = 60  # Same as in __init__
+        padding = (int(config.BUTTON_SIZE * 1.15) - config.BUTTON_SIZE) // 2
+        
+        # Determine button position based on current layout
+        if self.current_layout == 'top':
+            main_button_y_in_canvas = padding
+        else:
+            main_button_y_in_canvas = canvas_height - int(config.BUTTON_SIZE * 1.15) + padding
+        
+        # Top-left of button circle in screen coordinates
+        button_top_left_x = button_window_x + horizontal_offset + padding
+        button_top_left_y = button_window_y + main_button_y_in_canvas
+        
+        # Position bubble so its bottom-right corner is at button's top-left corner
+        # Start with initial positioning
+        bubble_x = button_top_left_x - bubble_width
+        bubble_y = button_top_left_y - bubble_height
+        
+        self.speech_bubble.geometry(f"{bubble_width}x{bubble_height}+{bubble_x}+{bubble_y}")
+        
+        # Update to apply geometry and get actual dimensions
+        self.speech_bubble.update_idletasks()
+        self.speech_bubble.update()
+        
+        # Get actual bubble dimensions and position
+        actual_bubble_width = self.speech_bubble.winfo_width()
+        actual_bubble_height = self.speech_bubble.winfo_height()
+        actual_bubble_x = self.speech_bubble.winfo_x()
+        actual_bubble_y = self.speech_bubble.winfo_y()
+        
+        # Calculate the bottom-right corner of the actual bubble (accounting for the 10px padding of the frame)
+        bubble_bottom_right_x = actual_bubble_x + actual_bubble_width - 10
+        bubble_bottom_right_y = actual_bubble_y + actual_bubble_height - 10
+        
+        # Calculate the adjustment needed to align perfectly
+        x_adjustment = button_top_left_x - bubble_bottom_right_x
+        y_adjustment = button_top_left_y - bubble_bottom_right_y
+        
+        # Apply adjustment
+        final_bubble_x = bubble_x + x_adjustment
+        final_bubble_y = bubble_y + y_adjustment
+        
+        self.speech_bubble.geometry(f"{bubble_width}x{bubble_height}+{final_bubble_x}+{final_bubble_y}")
+        
+        # Create rounded frame for the speech bubble
+        bubble_frame = ctk.CTkFrame(
+            self.speech_bubble,
+            corner_radius=15,
+            fg_color='#537D5D',  # Match main button color
+            border_width=0
+        )
+        bubble_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Add text content
+        text_label = ctk.CTkLabel(
+            bubble_frame,
+            text="Hey! Check out this cool feature:",
+            font=('Segoe UI', 12),
+            text_color='white',
+            wraplength=240
+        )
+        text_label.pack(pady=(15, 5), padx=15)
+        
+        # Add link to Google
+        link_label = ctk.CTkLabel(
+            bubble_frame,
+            text="👉 Learn more here",
+            font=('Segoe UI', 11, 'underline'),
+            text_color='#e0e0e0',
+            cursor='hand2'
+        )
+        link_label.pack(pady=(0, 15), padx=15)
+        
+        # Make link clickable - opens Google in browser
+        link_label.bind('<Button-1>', lambda e: webbrowser.open('https://www.google.com'))
+        
+        # Add close button with proper padding from edges
+        close_btn = ctk.CTkButton(
+            bubble_frame,
+            text="✕",
+            width=25,
+            height=25,
+            corner_radius=12,
+            fg_color='#73946B',
+            hover_color='#9EBC8A',
+            command=self.hide_speech_bubble,
+            font=('Segoe UI', 12)
+        )
+        # Position close button with proper padding from the right edge
+        # The frame has 10px outer padding, so we position relative to frame width
+        # Frame actual width is bubble_width - 20 (10px padding on each side)
+        frame_width = bubble_width - 20
+        # Position button 18px from the right edge of the frame
+        close_btn.place(x=frame_width - 25 - 18, y=8)
+        
+        # Auto-hide after 10 seconds
+        self.root.after(10000, self.hide_speech_bubble)
+    
+    def hide_speech_bubble(self):
+        """Hide the speech bubble"""
+        try:
+            if self.speech_bubble and self.speech_bubble.winfo_exists():
+                self.speech_bubble.withdraw()  # Hide first
+                self.speech_bubble.update_idletasks()  # Process pending events
+                self.speech_bubble.destroy()
+                self.speech_bubble = None
+        except Exception as e:
+            # Silently handle any destruction errors
+            self.speech_bubble = None
+    
+    def show_explanation(self, text, loading=False):
+        """Show explanation in a speech bubble style window"""
+        # Close existing explanation window if any
+        try:
+            if self.explanation_window and self.explanation_window.winfo_exists():
+                self.explanation_window.withdraw()  # Hide first
+                self.explanation_window.update_idletasks()  # Process pending events
+                self.explanation_window.destroy()
+        except Exception as e:
+            # Silently handle any destruction errors
+            pass
+        
+        # Create new explanation window
         self.explanation_window = ctk.CTkToplevel(self.root)
-        self.explanation_window.title("")  # Empty title
+        self.explanation_window.title("")
         self.explanation_window.attributes('-topmost', True)
         
-        # Remove title bar / top bar completely
+        # Remove title bar
         self.explanation_window.overrideredirect(True)
         
-        # Calculate initial window size (will adjust to content)
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-        
-        # Start with default size from config
-        initial_width = config.WINDOW_MIN_WIDTH
-        initial_height = config.WINDOW_MIN_HEIGHT
-        
-        # Position: calculated from bottom-right corner using config margins
-        # x_position = screen_width - window_width - margin_from_right
-        # y_position = screen_height - window_height - margin_from_bottom
-        x_position = screen_width - initial_width - config.WINDOW_MARGIN_RIGHT
-        y_position = screen_height - initial_height - config.WINDOW_MARGIN_BOTTOM
-        
-        self.explanation_window.geometry(
-            f"{initial_width}x{initial_height}+{x_position}+{y_position}"
-        )
-        
-        # Configure window with transparent background
-        transparent_bg = '#010101'  # Color to make transparent
+        # Make background transparent
+        transparent_bg = '#010101'
         self.explanation_window.configure(fg_color=transparent_bg)
         self.explanation_window.wm_attributes('-transparentcolor', transparent_bg)
         
-        # Create main container with rounded corners (no header)
-        main_container = ctk.CTkFrame(
+        # Position same as speech bubble - above and to the left of main button
+        self.root.update_idletasks()
+        button_window_x = self.root.winfo_x()
+        button_window_y = self.root.winfo_y()
+        
+        bubble_width = 400
+        bubble_height = 300
+        
+        # Calculate the top-left position of the main button circle within the window
+        canvas_height = int(config.BUTTON_SIZE * 5)
+        horizontal_offset = 60
+        padding = (int(config.BUTTON_SIZE * 1.15) - config.BUTTON_SIZE) // 2
+        
+        # Determine button position based on current layout
+        if self.current_layout == 'top':
+            main_button_y_in_canvas = padding
+        else:
+            main_button_y_in_canvas = canvas_height - int(config.BUTTON_SIZE * 1.15) + padding
+        
+        # Top-left of button circle in screen coordinates
+        button_top_left_x = button_window_x + horizontal_offset + padding
+        button_top_left_y = button_window_y + main_button_y_in_canvas
+        
+        # Position bubble so its bottom-right corner is at button's top-left corner
+        bubble_x = button_top_left_x - bubble_width
+        bubble_y = button_top_left_y - bubble_height
+        
+        self.explanation_window.geometry(f"{bubble_width}x{bubble_height}+{bubble_x}+{bubble_y}")
+        
+        # Update to apply geometry and get actual dimensions
+        self.explanation_window.update_idletasks()
+        self.explanation_window.update()
+        
+        # Get actual bubble dimensions and position
+        actual_bubble_width = self.explanation_window.winfo_width()
+        actual_bubble_height = self.explanation_window.winfo_height()
+        actual_bubble_x = self.explanation_window.winfo_x()
+        actual_bubble_y = self.explanation_window.winfo_y()
+        
+        # Calculate the bottom-right corner of the actual bubble (accounting for the 10px padding of the frame)
+        bubble_bottom_right_x = actual_bubble_x + actual_bubble_width - 10
+        bubble_bottom_right_y = actual_bubble_y + actual_bubble_height - 10
+        
+        # Calculate the adjustment needed to align perfectly
+        x_adjustment = button_top_left_x - bubble_bottom_right_x
+        y_adjustment = button_top_left_y - bubble_bottom_right_y
+        
+        # Apply adjustment
+        final_bubble_x = bubble_x + x_adjustment
+        final_bubble_y = bubble_y + y_adjustment
+        
+        self.explanation_window.geometry(f"{bubble_width}x{bubble_height}+{final_bubble_x}+{final_bubble_y}")
+        
+        # Create rounded frame in green (speech bubble style)
+        bubble_frame = ctk.CTkFrame(
             self.explanation_window,
-            fg_color="white",
             corner_radius=15,
-            border_width=2,
-            border_color="#e0e0e0"
+            fg_color='#537D5D',  # Match mate button color
+            border_width=0
         )
-        main_container.pack(fill='both', expand=True, padx=10, pady=10)  # Add padding to see rounded corners
+        bubble_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Helper function to safely close the explanation window
+        def close_explanation():
+            try:
+                if self.explanation_window and self.explanation_window.winfo_exists():
+                    self.explanation_window.withdraw()
+                    self.explanation_window.update_idletasks()
+                    self.explanation_window.destroy()
+                    self.explanation_window = None
+            except Exception as e:
+                self.explanation_window = None
         
         # Bind Escape key to close window
-        self.explanation_window.bind('<Escape>', lambda e: self.explanation_window.destroy())
+        self.explanation_window.bind('<Escape>', lambda e: close_explanation())
         
-        # Create header with title and close button
-        header_frame = tk.Frame(main_container, bg='white', cursor='fleur')
-        header_frame.pack(fill='x', padx=20, pady=(10, 5))
-        
-        # Title on the left
-        title_label = tk.Label(
-            header_frame,
-            text="mate explainer",
-            font=("Segoe UI", 11, "bold"),
-            fg="#333333",
-            bg="white",
-            cursor='fleur'
-        )
-        title_label.pack(side='left')
-        
-        # Close button (X) on the right
-        close_button = tk.Button(
-            header_frame,
+        # Add close button with proper padding from edges
+        close_btn = ctk.CTkButton(
+            bubble_frame,
             text="✕",
-            font=("Segoe UI", 10),
-            fg="#666666",
-            bg="white",
-            activebackground="#f0f0f0",
-            activeforeground="#333333",
-            relief="flat",
-            borderwidth=0,
-            cursor="hand2",
-            command=self.explanation_window.destroy,
-            padx=4,
-            pady=2
+            width=25,
+            height=25,
+            corner_radius=12,
+            fg_color='#73946B',
+            hover_color='#9EBC8A',
+            command=close_explanation,
+            font=('Segoe UI', 12)
         )
-        close_button.pack(side='right')
-        
-        # Hover effects for close button
-        close_button.bind('<Enter>', lambda e: close_button.config(fg="#333333", bg="#f0f0f0"))
-        close_button.bind('<Leave>', lambda e: close_button.config(fg="#666666", bg="white"))
-        
-        # Make window draggable by header
-        def start_drag(event):
-            self.explanation_window._drag_start_x = event.x_root
-            self.explanation_window._drag_start_y = event.y_root
-            self.explanation_window._drag_start_window_x = self.explanation_window.winfo_x()
-            self.explanation_window._drag_start_window_y = self.explanation_window.winfo_y()
-        
-        def on_drag(event):
-            if hasattr(self.explanation_window, '_drag_start_x'):
-                dx = event.x_root - self.explanation_window._drag_start_x
-                dy = event.y_root - self.explanation_window._drag_start_y
-                x = self.explanation_window._drag_start_window_x + dx
-                y = self.explanation_window._drag_start_window_y + dy
-                self.explanation_window.geometry(f"+{x}+{y}")
-        
-        def stop_drag(event):
-            if hasattr(self.explanation_window, '_drag_start_x'):
-                del self.explanation_window._drag_start_x
-                del self.explanation_window._drag_start_y
-                del self.explanation_window._drag_start_window_x
-                del self.explanation_window._drag_start_window_y
-        
-        # Bind drag events to header frame and title
-        header_frame.bind('<Button-1>', start_drag)
-        header_frame.bind('<B1-Motion>', on_drag)
-        header_frame.bind('<ButtonRelease-1>', stop_drag)
-        
-        title_label.bind('<Button-1>', start_drag)
-        title_label.bind('<B1-Motion>', on_drag)
-        title_label.bind('<ButtonRelease-1>', stop_drag)
+        # Position with proper padding from right edge
+        frame_width = bubble_width - 20
+        close_btn.place(x=frame_width - 25 - 18, y=8)
         
         # Content frame for text widget
-        content_frame = tk.Frame(main_container, bg='white')
-        content_frame.pack(fill='both', expand=True, padx=20, pady=(10, 20))
+        content_frame = tk.Frame(bubble_frame, bg='#537D5D')
+        content_frame.pack(fill='both', expand=True, padx=15, pady=(40, 15))
         
-        # Use standard tkinter Text widget for markdown support (CustomTkinter doesn't support tag fonts)
+        # Use standard tkinter Text widget for markdown support with GREEN background and WHITE text
         text_widget = tk.Text(
             content_frame,
             wrap="word",
             font=("Segoe UI", 10),
-            bg="white",
-            fg="#333333",
+            bg='#537D5D',  # Green background
+            fg='white',  # White text
             relief="flat",
             borderwidth=0,
             highlightthickness=0,
-            padx=15,
-            pady=15,
-            selectbackground='#667eea',
+            padx=10,
+            pady=10,
+            selectbackground='#73946B',
             selectforeground='white',
-            width=50,
-            height=15
+            width=40,
+            height=12
         )
         
-        # Add scrollbar
-        scrollbar = tk.Scrollbar(content_frame, command=text_widget.yview)
+        # Add scrollbar with green theme
+        scrollbar = tk.Scrollbar(
+            content_frame, 
+            command=text_widget.yview,
+            bg='#537D5D',
+            troughcolor='#73946B',
+            activebackground='#9EBC8A',
+            borderwidth=0,
+            highlightthickness=0
+        )
         text_widget.configure(yscrollcommand=scrollbar.set)
         
         scrollbar.pack(side='right', fill='y')
@@ -1489,23 +1656,6 @@ class ELI5Overlay:
         else:
             self.format_markdown_text(text_widget, text)
             text_widget.config(state='disabled')  # Make read-only
-            
-            # Update window to fit content
-            self.explanation_window.update_idletasks()
-            
-            # Calculate required size based on text content
-            text_widget.update_idletasks()
-            
-            # Get number of lines and adjust window size accordingly
-            num_lines = int(text_widget.index('end-1c').split('.')[0])
-            content_width = max(config.WINDOW_MIN_WIDTH, min(config.WINDOW_MAX_WIDTH, text_widget.winfo_reqwidth()))
-            content_height = max(config.WINDOW_MIN_HEIGHT, min(config.WINDOW_MAX_HEIGHT, num_lines * 18 + 60))  # Line height + padding
-            
-            # Recalculate position with actual content size using config margins
-            x_position = screen_width - content_width - config.WINDOW_MARGIN_RIGHT
-            y_position = screen_height - content_height - config.WINDOW_MARGIN_BOTTOM
-            
-            self.explanation_window.geometry(f"{content_width}x{content_height}+{x_position}+{y_position}")
     
     def run(self):
         """Start the application"""
