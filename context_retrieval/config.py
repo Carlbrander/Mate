@@ -19,6 +19,8 @@ ANALYSIS_PROMPT = """Analyze the provided screenshot, which contains multiple ta
 
 Tab Name: The main content of the tab in a few words
 
+Tab URL: The URL of the tab if available, otherwise leave it blank.
+
 Context: A brief description of the tab's purpose (e.g., "Main dashboard", "Settings page for user preferences").
 
 Text Content: Extract and summarize all visible text in the tab. 
@@ -29,6 +31,7 @@ Return the output in the following XML format:
 
 <Tab>
     <Name>Tab Name</Name>
+    <URL>Tab URL</URL>
     <Context>Tab description</Context>
     <TextContent>
         Extracted text content
@@ -44,7 +47,8 @@ Return the output in the following XML format:
 Ensure the XML is organized by tab and clearly describes both text and images for each section of the screenshot.
 do not include other xml tags than the ones specified.
 Be concise and to the point. Dont provide more than 1000 tokens.
-Ignore ads and other non-content elements. """
+Ignore ads and other non-content elements.
+Output well formatted xml and nothing else."""
 
 # Storage settings
 SAVE_SCREENSHOTS = False  # Whether to save screenshots to disk
