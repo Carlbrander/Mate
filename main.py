@@ -493,7 +493,24 @@ class ELI5Overlay:
         self.is_dragging = False
         self.is_hovered = False
         self.leave_timer = None  # For delayed leave detection
+                # Extra button hover state tracking
+        self.extra_button_hover_state = [False, False, False]
+        self.extra_button_shrink_timers = [None, None, None]
         
+        # Pomodoro timer state
+        self.pomodoro_active = False
+        self.pomodoro_running = False
+        self.pomodoro_is_break = False
+        self.pomodoro_seconds = 25 * 60  # 25 minutes for work
+        self.pomodoro_timer_id = None
+        self.pomodoro_control_dots = []  # Will store control dot canvas items
+        
+        # Speech bubble state
+        self.speech_bubble = None
+        
+        # Schedule speech bubble to appear after 3 seconds
+        self.root.after(3000, self.show_speech_bubble)
+
         # Start context retrieval service in background
         self.start_context_retrieval_service()
     
