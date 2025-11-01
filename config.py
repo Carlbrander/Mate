@@ -24,13 +24,13 @@ Here is student learning objective for the current study session:
 Here is the information on student screen:
 {text}
 
-Please analyze it and do the following instructions:{instructions}
+Please analyze it and do the following instructions: {instructions}
 The output should be in the following format: {output_format}
 
 Important: consider student learning objective when generating insights
 """
 SUMMARY_GENERATION_INSTRUCTION = "provide short summary of the screen content"
-LINK_GENERATION_INSTRUCTION = "provide urls with link descriptions (8 words max prompting student to visit the link) that predict the next step in the learning process based on the screen content"
+LINK_GENERATION_INSTRUCTION = "provide web page urls with short descriptions (8 words max offering the student to visit the page) that predict the next step in the learning process based on the screen content. Include links only if you are confident that they are relevant to the student's learning objective."
 SUGGESTIONS_GENERATION_INSTRUCTION = "make suggestions how student can continue their learning based on the screen content and your findings"
 
 # Button settings
