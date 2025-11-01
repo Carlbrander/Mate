@@ -4,6 +4,7 @@ import customtkinter as ctk
 import pyperclip
 import pyautogui
 import time
+import math
 
 import signal
 import sys
@@ -34,10 +35,12 @@ class ELI5Overlay:
         x_position = screen_width - config.BUTTON_SIZE - 100  # More towards center
         y_position = screen_height - config.BUTTON_SIZE - 150  # Higher up
         
-        # Window size needs to accommodate canvas with extra space for hover and additional buttons
-        # We need space for 3 buttons above the main button
-        window_width = int(config.BUTTON_SIZE * 1.15)
+        # Window size needs to accommodate canvas with extra space for hover, additional buttons, and pomodoro controls
+        # We need space for 3 buttons above the main button AND space for pomodoro control dots (35+18=53px on each side)
+        window_width = int(config.BUTTON_SIZE * 1.15) + 120  # Extra space for pomodoro controls
         window_height = int(config.BUTTON_SIZE * 5)  # Space for 4 buttons total
+        # Adjust x_position to keep button centered
+        x_position = x_position - 60  # Shift left by half the extra width
         self.root.geometry(f"{window_width}x{window_height}+{x_position}+{y_position - (window_height - int(config.BUTTON_SIZE * 1.15))}")
         
         # Make window not steal focus on Windows using WinAPI
@@ -52,8 +55,8 @@ class ELI5Overlay:
         except Exception as e:
             print(f"Note: Could not set no-activate style: {e}")
         
-        # Create circular button using Canvas - add extra space for hover growth and additional buttons
-        canvas_width = int(config.BUTTON_SIZE * 1.15)
+        # Create circular button using Canvas - add extra space for hover growth, additional buttons, and pomodoro controls
+        canvas_width = int(config.BUTTON_SIZE * 1.15) + 120  # Wider to accommodate pomodoro controls
         canvas_height = int(config.BUTTON_SIZE * 5)
         self.canvas = tk.Canvas(
             self.root,
@@ -64,19 +67,25 @@ class ELI5Overlay:
         )
         self.canvas.pack()
         
-        # Calculate positions - main button at bottom of canvas
+        # Calculate positions - main button at bottom of canvas, centered horizontally
         self.main_button_size = config.BUTTON_SIZE
         self.small_button_size = int(config.BUTTON_SIZE * 0.75)  # 75% of main button
-        self.button_spacing = int(config.BUTTON_SIZE * 1.1)  # Space between buttons
+        self.button_spacing = int(config.BUTTON_SIZE * 1.1)  # Space between button centers
+        # When extending downward, first button needs to account for half of main + half of small + gap
+        self.first_button_offset_down = int(config.BUTTON_SIZE * 0.5 + self.small_button_size * 0.5 + config.BUTTON_SIZE * 0.1)
         
-        # Main button position (at bottom)
+        # Main button position (at bottom, centered in wider canvas)
         main_button_y = canvas_height - int(config.BUTTON_SIZE * 1.15)
         padding = (int(config.BUTTON_SIZE * 1.15) - config.BUTTON_SIZE) // 2
+        # Center the button horizontally in the wider canvas
+        horizontal_offset = 60  # Half of the extra 120px width
         
-        # Draw main circular button
+        # Draw main circular button (centered in canvas)
+        button_left = horizontal_offset + padding
+        button_right = horizontal_offset + int(config.BUTTON_SIZE * 1.15) - padding
         self.button_circle = self.canvas.create_oval(
-            padding, main_button_y + padding, 
-            canvas_width - padding, main_button_y + int(config.BUTTON_SIZE * 1.15) - padding,
+            button_left, main_button_y + padding, 
+            button_right, main_button_y + int(config.BUTTON_SIZE * 1.15) - padding,
             fill='#667eea',  # Modern purple-blue gradient
             outline='',
             width=0
@@ -85,7 +94,7 @@ class ELI5Overlay:
         # Add text centered in main button
         self.original_font_size = 12
         self.button_text = self.canvas.create_text(
-            canvas_width // 2,
+            horizontal_offset + int(config.BUTTON_SIZE * 1.15) // 2,
             main_button_y + int(config.BUTTON_SIZE * 1.15) // 2,
             text=config.BUTTON_TEXT,
             font=('Segoe UI', self.original_font_size, 'bold'),
@@ -96,16 +105,22 @@ class ELI5Overlay:
         self.extra_buttons = []
         self.extra_button_icons = []
         button_colors = ['#764ba2', '#f093fb', '#4facfe']  # Different gradient colors
-        button_icons = ['📋', '🔍', '✨']  # Example icons
+        button_icons = ['📋', '🔍', '🍅']  # Icons: clipboard, magnifier, tomato (pomodoro)
         
         for i in range(3):
-            # Initially position at main button location
-            small_padding = (canvas_width - self.small_button_size) // 2
+            # Initially position at main button location (centered perfectly on main button center)
+            # Center the small button on the main button's center point
+            main_center_x = horizontal_offset + int(config.BUTTON_SIZE * 1.15) // 2
+            main_center_y = main_button_y + int(config.BUTTON_SIZE * 1.15) // 2
+            
+            small_button_left = main_center_x - self.small_button_size // 2
+            small_button_top = main_center_y - self.small_button_size // 2
+            
             button = self.canvas.create_oval(
-                small_padding,
-                main_button_y + (self.main_button_size - self.small_button_size) // 2 + padding,
-                small_padding + self.small_button_size,
-                main_button_y + (self.main_button_size - self.small_button_size) // 2 + padding + self.small_button_size,
+                small_button_left,
+                small_button_top,
+                small_button_left + self.small_button_size,
+                small_button_top + self.small_button_size,
                 fill=button_colors[i],
                 outline='',
                 width=0,
@@ -113,8 +128,8 @@ class ELI5Overlay:
             )
             
             icon = self.canvas.create_text(
-                canvas_width // 2,
-                main_button_y + self.main_button_size // 2 + padding,
+                main_center_x,
+                main_center_y,
                 text=button_icons[i],
                 font=('Segoe UI', 14),
                 fill='white',
@@ -128,8 +143,11 @@ class ELI5Overlay:
         self.animation_running = False
         self.animation_direction = None  # 'up' or 'down'
         self.buttons_visible = False  # Track if extra buttons are shown
+        self.buttons_expand_direction = 'up'  # Track if buttons expand 'up' or 'down'
+        self.current_layout = 'bottom'  # Track if main button is at 'bottom' or 'top' of canvas
         
-        # Bind events
+        # Bind drag events to make main button draggable across screen
+        # Click and drag on the mate button to move it anywhere
         self.canvas.tag_bind(self.button_circle, '<Button-1>', self.start_drag)
         self.canvas.tag_bind(self.button_circle, '<B1-Motion>', self.on_drag)
         self.canvas.tag_bind(self.button_circle, '<ButtonRelease-1>', self.on_button_click)
@@ -151,6 +169,13 @@ class ELI5Overlay:
             self.canvas.tag_bind(icon, '<Enter>', self.cancel_leave)
             self.canvas.tag_bind(icon, '<Leave>', self.check_leave)
         
+        # Bind click events to extra buttons
+        for i, (button, icon) in enumerate(zip(self.extra_buttons, self.extra_button_icons)):
+            # Create a lambda with default argument to capture current i value
+            click_handler = lambda e, index=i: self.on_extra_button_click(index)
+            self.canvas.tag_bind(button, '<Button-1>', click_handler)
+            self.canvas.tag_bind(icon, '<Button-1>', click_handler)
+        
         # Initialize Anthropic client
         try:
             self.client = Anthropic(api_key=config.ANTHROPIC_API_KEY)
@@ -167,27 +192,123 @@ class ELI5Overlay:
         self.is_dragging = False
         self.is_hovered = False
         self.leave_timer = None  # For delayed leave detection
+        
+        # Pomodoro timer state
+        self.pomodoro_active = False
+        self.pomodoro_running = False
+        self.pomodoro_is_break = False
+        self.pomodoro_seconds = 25 * 60  # 25 minutes for work
+        self.pomodoro_timer_id = None
+        self.pomodoro_control_dots = []  # Will store control dot canvas items
     
     def ease_out_cubic(self, t):
         """Easing function for smooth deceleration"""
         return 1 - pow(1 - t, 3)
     
+    def reposition_to_top_layout(self):
+        """Move main button to top of canvas to make room for buttons below"""
+        canvas_height = int(config.BUTTON_SIZE * 5)
+        canvas_width = int(config.BUTTON_SIZE * 1.15) + 120  # Wider canvas
+        
+        # Calculate current and target positions
+        current_main_button_y = canvas_height - int(config.BUTTON_SIZE * 1.15)
+        target_main_button_y = 0
+        
+        # Calculate offset to move canvas elements
+        offset_y = target_main_button_y - current_main_button_y
+        
+        # Delete pomodoro controls first (will be recreated after move)
+        controls_were_visible = self.buttons_visible if self.pomodoro_active and self.pomodoro_control_dots else False
+        if self.pomodoro_control_dots:
+            for dot in self.pomodoro_control_dots:
+                self.canvas.delete(dot)
+            self.pomodoro_control_dots = []
+        
+        # Move all canvas elements (except pomodoro controls which we deleted)
+        self.canvas.move(self.button_circle, 0, offset_y)
+        self.canvas.move(self.button_text, 0, offset_y)
+        for button in self.extra_buttons:
+            self.canvas.move(button, 0, offset_y)
+        for icon in self.extra_button_icons:
+            self.canvas.move(icon, 0, offset_y)
+        
+        # Adjust window position to keep button in same screen location
+        current_x = self.root.winfo_x()
+        current_y = self.root.winfo_y()
+        window_width = int(config.BUTTON_SIZE * 1.15) + 120  # Wider window for pomodoro controls
+        window_height = int(config.BUTTON_SIZE * 5)
+        # Move window down by the same offset so button stays in place
+        new_y = current_y - offset_y
+        self.root.geometry(f"{window_width}x{window_height}+{current_x}+{new_y}")
+        
+        # Clear stored coordinates so they're recalculated
+        if hasattr(self, 'button_initial_coords'):
+            delattr(self, 'button_initial_coords')
+            delattr(self, 'icon_initial_coords')
+        
+        # Don't create controls here - they'll be created after animation completes
+        # This ensures they're positioned relative to the pomodoro button's FINAL position
+    
+    def reposition_to_bottom_layout(self):
+        """Move main button back to bottom of canvas (default layout)"""
+        canvas_height = int(config.BUTTON_SIZE * 5)
+        canvas_width = int(config.BUTTON_SIZE * 1.15) + 120  # Wider canvas
+        
+        # Calculate current and target positions
+        current_main_button_y = 0
+        target_main_button_y = canvas_height - int(config.BUTTON_SIZE * 1.15)
+        
+        # Calculate offset to move canvas elements
+        offset_y = target_main_button_y - current_main_button_y
+        
+        # Delete pomodoro controls first (will be recreated after move)
+        controls_were_visible = self.buttons_visible if self.pomodoro_active and self.pomodoro_control_dots else False
+        if self.pomodoro_control_dots:
+            for dot in self.pomodoro_control_dots:
+                self.canvas.delete(dot)
+            self.pomodoro_control_dots = []
+        
+        # Move all canvas elements (except pomodoro controls which we deleted)
+        self.canvas.move(self.button_circle, 0, offset_y)
+        self.canvas.move(self.button_text, 0, offset_y)
+        for button in self.extra_buttons:
+            self.canvas.move(button, 0, offset_y)
+        for icon in self.extra_button_icons:
+            self.canvas.move(icon, 0, offset_y)
+        
+        # Adjust window position to keep button in same screen location
+        current_x = self.root.winfo_x()
+        current_y = self.root.winfo_y()
+        window_width = int(config.BUTTON_SIZE * 1.15) + 120  # Wider window for pomodoro controls
+        window_height = int(config.BUTTON_SIZE * 5)
+        # Move window up by the same offset so button stays in place
+        new_y = current_y - offset_y
+        self.root.geometry(f"{window_width}x{window_height}+{current_x}+{new_y}")
+        
+        # Clear stored coordinates so they're recalculated
+        if hasattr(self, 'button_initial_coords'):
+            delattr(self, 'button_initial_coords')
+            delattr(self, 'icon_initial_coords')
+        
+        # Don't create controls here - they'll be created after animation completes
+        # This ensures they're positioned relative to the pomodoro button's FINAL position
+    
     def animate_extra_buttons(self, direction, frame=0, max_frames=20):
-        """Animate extra buttons up or down with easing"""
+        """Animate extra buttons show/hide with easing, respecting expand direction"""
         if frame == 0:
             self.animation_running = True
             self.animation_direction = direction
             
-            # Make buttons visible if animating up
-            if direction == 'up':
+            # Make buttons visible when showing
+            if direction == 'show':
                 for button in self.extra_buttons:
                     self.canvas.itemconfig(button, state='normal')
-                    self.canvas.tag_raise(button)  # Bring to front when going up
+                    self.canvas.tag_raise(button)  # Bring to front when showing
                 for icon in self.extra_button_icons:
                     self.canvas.itemconfig(icon, state='normal')
-                    self.canvas.tag_raise(icon)  # Bring to front when going up
-            elif direction == 'down':
-                # Move extra buttons behind the main button when animating down
+                    self.canvas.tag_raise(icon)  # Bring to front when showing
+            elif direction == 'hide':
+                # Move extra buttons behind the main button when hiding
                 for button in self.extra_buttons:
                     self.canvas.tag_lower(button, self.button_circle)
                 for icon in self.extra_button_icons:
@@ -195,15 +316,25 @@ class ELI5Overlay:
         
         if frame >= max_frames:
             self.animation_running = False
-            # Hide buttons if animating down and update state
-            if direction == 'down':
+            # Hide buttons if finished hiding and update state
+            if direction == 'hide':
                 for button in self.extra_buttons:
                     self.canvas.itemconfig(button, state='hidden')
                 for icon in self.extra_button_icons:
                     self.canvas.itemconfig(icon, state='hidden')
                 self.buttons_visible = False
-            elif direction == 'up':
+            elif direction == 'show':
                 self.buttons_visible = True
+                # Create pomodoro controls if pomodoro is active
+                # Always recreate them to ensure correct position relative to pomodoro button
+                if self.pomodoro_active:
+                    # Delete existing controls if any (they might be in wrong position)
+                    if self.pomodoro_control_dots:
+                        for dot in self.pomodoro_control_dots:
+                            self.canvas.delete(dot)
+                        self.pomodoro_control_dots = []
+                    # Create controls at correct position (after buttons are in final position)
+                    self.create_pomodoro_controls()
             return
         
         # Calculate eased progress
@@ -211,14 +342,20 @@ class ELI5Overlay:
         
         # Calculate movement distance for each button
         for i, (button, icon) in enumerate(zip(self.extra_buttons, self.extra_button_icons)):
-            # Each button moves to a position above the previous one
-            target_offset = -self.button_spacing * (i + 1)
+            # Each button moves to a position based on expand direction
+            # Negative offset = up, positive offset = down
+            # Use same spacing for both directions for consistency
+            if self.buttons_expand_direction == 'up':
+                target_offset = -self.button_spacing * (i + 1)  # Negative = move up
+            else:  # down
+                # For downward, use same spacing as upward (just positive)
+                target_offset = self.button_spacing * (i + 1)  # Positive = move down
             
-            if direction == 'up':
+            if direction == 'show':
                 # Move from 0 to target_offset
                 current_offset = target_offset * progress
-            else:  # down
-                # Move from target_offset to 0
+            else:  # hide
+                # Move from target_offset back to 0
                 current_offset = target_offset * (1 - progress)
             
             # Calculate position for this frame
@@ -257,8 +394,9 @@ class ELI5Overlay:
         if self.leave_timer:
             self.root.after_cancel(self.leave_timer)
         
-        # Schedule leave check after a short delay
-        self.leave_timer = self.root.after(50, self.on_leave)
+        # Schedule leave check after a longer delay (200ms to allow moving between buttons)
+        # This is especially important for the Pomodoro control buttons
+        self.leave_timer = self.root.after(200, self.on_leave)
     
     def on_hover(self, event):
         """Button hover effect - grow size and show extra buttons"""
@@ -266,12 +404,39 @@ class ELI5Overlay:
         self.cancel_leave(event)
         
         if not self.is_hovered:
+            # Determine if buttons should expand up or down based on screen position FIRST
+            screen_height = self.root.winfo_screenheight()
+            button_y = self.root.winfo_y()
+            space_above = button_y
+            space_needed = self.button_spacing * 3  # Space needed for 3 buttons
+            
+            # If not enough space above, expand downward
+            if space_above < space_needed:
+                self.buttons_expand_direction = 'down'
+                # Reposition button layout to top of canvas if needed
+                if self.current_layout == 'bottom':
+                    self.reposition_to_top_layout()
+                    self.current_layout = 'top'
+            else:
+                self.buttons_expand_direction = 'up'
+                # Reposition button layout to bottom of canvas if needed
+                if self.current_layout == 'top':
+                    self.reposition_to_bottom_layout()
+                    self.current_layout = 'bottom'
+            
             self.is_hovered = True
-            # Scale up the button by 10% from center
-            canvas_width = int(config.BUTTON_SIZE * 1.15)
+            
+            # Scale up the button by 10% from center (calculate position based on current layout)
             canvas_height = int(config.BUTTON_SIZE * 5)
-            main_button_y = canvas_height - int(config.BUTTON_SIZE * 1.15)
-            center_x = canvas_width // 2
+            horizontal_offset = 60  # Horizontal centering offset
+            
+            if self.current_layout == 'top':
+                main_button_y = 0
+            else:
+                main_button_y = canvas_height - int(config.BUTTON_SIZE * 1.15)
+            
+            # Center point is offset by the horizontal centering
+            center_x = horizontal_offset + int(config.BUTTON_SIZE * 1.15) // 2
             center_y = main_button_y + int(config.BUTTON_SIZE * 1.15) // 2
             self.canvas.scale(self.button_circle, center_x, center_y, 1.1, 1.1)
             
@@ -280,9 +445,9 @@ class ELI5Overlay:
             self.canvas.itemconfig(self.button_text, font=('Segoe UI', new_font_size, 'bold'))
             self.root.config(cursor='hand2')
             
-            # Animate extra buttons up only if they're not already visible and not animating up
+            # Animate extra buttons only if they're not already visible and not animating
             if not self.buttons_visible and not self.animation_running:
-                self.animate_extra_buttons('up')
+                self.animate_extra_buttons('show')
     
     def on_leave(self):
         """Button leave effect - shrink back and hide extra buttons"""
@@ -291,11 +456,18 @@ class ELI5Overlay:
         
         if self.is_hovered:
             self.is_hovered = False
-            # Scale button back down to original size
-            canvas_width = int(config.BUTTON_SIZE * 1.15)
+            
+            # Scale button back down to original size (calculate position based on current layout)
             canvas_height = int(config.BUTTON_SIZE * 5)
-            main_button_y = canvas_height - int(config.BUTTON_SIZE * 1.15)
-            center_x = canvas_width // 2
+            horizontal_offset = 60  # Horizontal centering offset
+            
+            if self.current_layout == 'top':
+                main_button_y = 0
+            else:
+                main_button_y = canvas_height - int(config.BUTTON_SIZE * 1.15)
+            
+            # Center point is offset by the horizontal centering
+            center_x = horizontal_offset + int(config.BUTTON_SIZE * 1.15) // 2
             center_y = main_button_y + int(config.BUTTON_SIZE * 1.15) // 2
             self.canvas.scale(self.button_circle, center_x, center_y, 1/1.1, 1/1.1)
             
@@ -303,25 +475,288 @@ class ELI5Overlay:
             self.canvas.itemconfig(self.button_text, font=('Segoe UI', self.original_font_size, 'bold'))
             self.root.config(cursor='')
             
-            # Animate extra buttons down only if they're visible and not animating down
+            # Hide pomodoro controls when menu collapses
+            self.hide_pomodoro_controls_visibility()
+            
+            # Animate extra buttons back to hidden position
             if self.buttons_visible and not self.animation_running:
-                self.animate_extra_buttons('down')
+                self.animate_extra_buttons('hide')
     
     def start_drag(self, event):
         self.drag_start_x = event.x
         self.drag_start_y = event.y
         self.is_dragging = False
+        self.root.config(cursor='fleur')  # Change cursor to move cursor
+        
+        # Delete pomodoro controls at start of drag - they'll be recreated on next hover
+        if self.pomodoro_control_dots:
+            for dot in self.pomodoro_control_dots:
+                self.canvas.delete(dot)
+            self.pomodoro_control_dots = []
     
     def on_drag(self, event):
         x = self.root.winfo_x() + event.x - self.drag_start_x
         y = self.root.winfo_y() + event.y - self.drag_start_y
         self.root.geometry(f"+{x}+{y}")
         self.is_dragging = True
+        
+        # Move the entire button menu, keeping extra buttons in sync if visible
+        # The canvas coordinates are relative, so they move automatically with the window
+    
+    def on_extra_button_click(self, index):
+        """Handle clicks on extra buttons"""
+        print(f"Extra button {index} clicked")
+        
+        if index == 0:
+            # First button (📋) - Clipboard/Notes functionality (placeholder)
+            print("Clipboard button - not yet implemented")
+        elif index == 1:
+            # Second button (🔍) - Search functionality (placeholder)
+            print("Search button - not yet implemented")
+        elif index == 2:
+            # Third button (🍅) - Pomodoro timer
+            if not self.pomodoro_active:
+                print("Starting Pomodoro timer...")
+                self.start_pomodoro()
+            else:
+                # If already active, toggle play/pause
+                self.toggle_pomodoro()
+    
+    def start_pomodoro(self):
+        """Start the Pomodoro timer integrated into the button"""
+        self.pomodoro_active = True
+        self.pomodoro_running = True
+        self.pomodoro_is_break = False
+        self.pomodoro_seconds = 25 * 60
+        
+        # Change tomato icon to timer text with smaller font
+        self.canvas.itemconfig(
+            self.extra_button_icons[2], 
+            text=self.format_pomodoro_time(),
+            font=('Segoe UI', 10, 'bold')
+        )
+        
+        # Create control dots
+        self.create_pomodoro_controls()
+        
+        # Start countdown
+        self.update_pomodoro()
+    
+    def format_pomodoro_time(self):
+        """Format seconds as MM:SS for display"""
+        minutes = self.pomodoro_seconds // 60
+        seconds = self.pomodoro_seconds % 60
+        return f"{minutes:02d}:{seconds:02d}"
+    
+    def create_pomodoro_controls(self):
+        """Create three small control dots around the tomato button"""
+        # Get tomato button position
+        tomato_coords = self.canvas.coords(self.extra_buttons[2])
+        if not tomato_coords:
+            return
+        
+        # Calculate center position
+        button_center_x = (tomato_coords[0] + tomato_coords[2]) / 2
+        button_center_y = (tomato_coords[1] + tomato_coords[3]) / 2
+        button_radius = (tomato_coords[2] - tomato_coords[0]) / 2
+        
+        # Control dot properties
+        dot_radius = 22  # Even bigger buttons
+        dot_distance = button_radius + 35  # Further distance from button center
+        hover_area_radius = 28  # Even bigger invisible hover area
+        
+        # Position dots based on expand direction
+        # When expanding UP: controls go ABOVE pomodoro (negative Y = angles 210, 270, 330)
+        # When expanding DOWN: controls go BELOW pomodoro (positive Y = angles 30, 90, 150)
+        if self.buttons_expand_direction == 'up':
+            # Buttons expand upward, so pomodoro is at top - controls go above (negative Y offset)
+            angles = [210, 270, 330]  # Top-left, top, top-right
+        else:  # down
+            # Buttons expand downward, so pomodoro is at bottom - controls go below (positive Y offset)
+            angles = [30, 90, 150]  # Bottom-right, bottom, bottom-left
+        
+        # Colors matching the app theme (similar to other buttons)
+        colors = ['#667eea', '#764ba2', '#f093fb']  # Blue, Purple, Pink
+        icons = ['▶', '❚❚', '↻']  # Play, Pause (vertical bars), Reset (circular arrow)
+        
+        for i, angle in enumerate(angles):
+            rad = math.radians(angle)
+            x = button_center_x + dot_distance * math.cos(rad)
+            y = button_center_y + dot_distance * math.sin(rad)
+            
+            # Create invisible larger hover area (captures hover between buttons)
+            hover_area = self.canvas.create_oval(
+                x - hover_area_radius, y - hover_area_radius,
+                x + hover_area_radius, y + hover_area_radius,
+                fill='',
+                outline='',
+                width=0,
+                state='normal'
+            )
+            
+            # Create button circle (no border)
+            dot = self.canvas.create_oval(
+                x - dot_radius, y - dot_radius,
+                x + dot_radius, y + dot_radius,
+                fill=colors[i],
+                outline='',
+                width=0,
+                state='normal'
+            )
+            
+            # Create icon text (smaller font, with adjustments for centering)
+            icon_x = x
+            icon_y = y
+            icon_font_size = 6  # Reduced all icons size
+            
+            # Adjust play icon position slightly for perfect centering
+            if i == 0:  # Play icon
+                icon_x = x + 1  # Slight right shift for visual centering
+            elif i == 1:  # Pause icon - make smaller due to visual weight
+                icon_font_size = 4
+            
+            icon = self.canvas.create_text(
+                icon_x, icon_y,
+                text=icons[i],
+                font=('Segoe UI', icon_font_size, 'bold'),
+                fill='white',
+                state='normal'
+            )
+            
+            # Raise visible elements above hover area
+            self.canvas.tag_raise(dot)
+            self.canvas.tag_raise(icon)
+            
+            self.pomodoro_control_dots.append(hover_area)
+            self.pomodoro_control_dots.append(dot)
+            self.pomodoro_control_dots.append(icon)
+            
+            # Bind hover events to all elements (hover area, circle, and icon)
+            for element in [hover_area, dot, icon]:
+                self.canvas.tag_bind(element, '<Enter>', self.cancel_leave)
+                self.canvas.tag_bind(element, '<Leave>', self.check_leave)
+            
+            # Bind clicks to control dots (circle, icon, and hover area for maximum coverage)
+            # Use default arguments to capture current i value
+            if i == 0:  # Play/Resume
+                click_handler = lambda e, func=self.pomodoro_play: func()
+            elif i == 1:  # Pause
+                click_handler = lambda e, func=self.pomodoro_pause: func()
+            elif i == 2:  # Reset
+                click_handler = lambda e, func=self.pomodoro_reset: func()
+            else:
+                click_handler = None
+            
+            if click_handler:
+                self.canvas.tag_bind(hover_area, '<Button-1>', click_handler)
+                self.canvas.tag_bind(dot, '<Button-1>', click_handler)
+                self.canvas.tag_bind(icon, '<Button-1>', click_handler)
+    
+    def hide_pomodoro_controls_visibility(self):
+        """Hide control dots (but don't delete them)"""
+        for element in self.pomodoro_control_dots:
+            self.canvas.itemconfig(element, state='hidden')
+    
+    def show_pomodoro_controls_visibility(self):
+        """Show control dots if pomodoro is active"""
+        if self.pomodoro_active and self.pomodoro_control_dots:
+            for element in self.pomodoro_control_dots:
+                self.canvas.itemconfig(element, state='normal')
+    
+    def hide_pomodoro_controls(self):
+        """Hide and remove control dots"""
+        for dot in self.pomodoro_control_dots:
+            self.canvas.delete(dot)
+        self.pomodoro_control_dots = []
+    
+    def update_pomodoro(self):
+        """Update the Pomodoro timer countdown"""
+        if self.pomodoro_running and self.pomodoro_seconds > 0:
+            self.pomodoro_seconds -= 1
+            self.canvas.itemconfig(self.extra_button_icons[2], text=self.format_pomodoro_time())
+            self.pomodoro_timer_id = self.root.after(1000, self.update_pomodoro)
+        elif self.pomodoro_seconds == 0:
+            # Timer finished
+            self.pomodoro_timer_finished()
+    
+    def pomodoro_timer_finished(self):
+        """Handle Pomodoro timer completion"""
+        if not self.pomodoro_is_break:
+            # Work session finished, start break
+            self.pomodoro_is_break = True
+            self.pomodoro_seconds = 5 * 60  # 5 minute break
+            self.pomodoro_running = True
+            
+            # Change button color to green
+            self.canvas.itemconfig(self.extra_buttons[2], fill='#4CAF50')
+            
+            # Update display and continue
+            self.canvas.itemconfig(self.extra_button_icons[2], text=self.format_pomodoro_time())
+            self.update_pomodoro()
+        else:
+            # Break finished, reset to work session but don't start
+            self.pomodoro_is_break = False
+            self.pomodoro_seconds = 25 * 60
+            self.pomodoro_running = False
+            
+            # Change button color back
+            self.canvas.itemconfig(self.extra_buttons[2], fill='#4facfe')
+            
+            # Update display
+            self.canvas.itemconfig(self.extra_button_icons[2], text=self.format_pomodoro_time())
+    
+    def toggle_pomodoro(self):
+        """Toggle play/pause for active timer"""
+        if self.pomodoro_running:
+            self.pomodoro_pause()
+        else:
+            self.pomodoro_play()
+    
+    def pomodoro_play(self):
+        """Resume/start the Pomodoro timer"""
+        if self.pomodoro_active and not self.pomodoro_running:
+            self.pomodoro_running = True
+            self.update_pomodoro()
+    
+    def pomodoro_pause(self):
+        """Pause the Pomodoro timer"""
+        if self.pomodoro_running:
+            self.pomodoro_running = False
+            if self.pomodoro_timer_id:
+                self.root.after_cancel(self.pomodoro_timer_id)
+                self.pomodoro_timer_id = None
+    
+    def pomodoro_reset(self):
+        """Reset the Pomodoro timer"""
+        # Cancel any running timer
+        if self.pomodoro_timer_id:
+            self.root.after_cancel(self.pomodoro_timer_id)
+            self.pomodoro_timer_id = None
+        
+        # Reset state
+        self.pomodoro_active = False
+        self.pomodoro_running = False
+        self.pomodoro_is_break = False
+        self.pomodoro_seconds = 25 * 60
+        
+        # Restore tomato icon with original font
+        self.canvas.itemconfig(
+            self.extra_button_icons[2], 
+            text='🍅',
+            font=('Segoe UI', 14)
+        )
+        
+        # Restore original color
+        self.canvas.itemconfig(self.extra_buttons[2], fill='#4facfe')
+        
+        # Hide control dots
+        self.hide_pomodoro_controls()
     
     def on_button_click(self, event=None):
         # If we're dragging, don't trigger the action
         if self.is_dragging:
             self.is_dragging = False
+            self.root.config(cursor='hand2' if self.is_hovered else '')  # Restore cursor
             return
         
         if event and (abs(event.x - self.drag_start_x) > 5 or abs(event.y - self.drag_start_y) > 5):
