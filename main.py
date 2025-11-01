@@ -17,6 +17,7 @@ import config
 import ctypes
 import re
 from context_retrieval.ContextRetrievalService import ContextRetrievalService
+from context_retrieval.shared_queue import OverwritingQueue
 
 def show_study_topic_dialog():
     """Show startup dialog to ask user what they're studying"""
@@ -520,8 +521,10 @@ class ELI5Overlay:
         try:
             print("Starting context retrieval service...")
             service = ContextRetrievalService()
-            
+
+            self.links_queue = OverwritingQueue()
             # Start service in daemon thread (will stop when main app exits)
+            service.links_queue = self.links_queue
             context_thread = threading.Thread(target=service.run, daemon=True)
             context_thread.start()
             
@@ -1711,14 +1714,14 @@ if __name__ == "__main__":
         
         # Save the study topic to environment variable
         if study_topic:
-            os.environ['STUDY_TOPIC'] = study_topic
+            os.environ['LEARNING_OBJECTIVE'] = study_topic
             print(f"Study topic set to: {study_topic}")
         else:
-            os.environ['STUDY_TOPIC'] = "General Study"
+            os.environ['LEARNING_OBJECTIVE'] = "General Study"
             print("No study topic entered, using: General Study")
         
         # Verify environment variable is saved
-        print(f"Environment variable STUDY_TOPIC = '{os.environ.get('STUDY_TOPIC', 'NOT SET')}'")
+        print(f"Environment variable LEARNING_OBJECTIVE = '{os.environ.get('LEARNING_OBJECTIVE', 'NOT SET')}'")
         print("")  # Empty line for readability
         
         # Start the main application

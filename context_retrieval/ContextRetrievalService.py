@@ -31,7 +31,8 @@ class ContextRetrievalService:
         self.running = False
         self.setup_logging()
         self.logger = logging.getLogger(__name__)
-        
+
+        self.links_queue = None
         # Load API key
         try:
             with open(config.API_KEY_PATH, 'r') as f:
@@ -166,7 +167,7 @@ class ContextRetrievalService:
                 
                 if insights and insights.links:
                     # Put links in the queue (overwrites old entry if full)
-                    links_queue.put(insights.links)
+                    self.links_queue.put(insights.links)
                     self.logger.info(f"Generated {len(insights.links)} links and added to queue")
                     
                     # Print links to console
