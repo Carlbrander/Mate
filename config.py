@@ -30,7 +30,7 @@ The output should be in the following format: {output_format}
 Important: consider student learning objective when generating insights
 """
 SUMMARY_GENERATION_INSTRUCTION = "provide short summary of the screen content"
-LINK_GENERATION_INSTRUCTION = "provide a web page url with a short description (8 words max offering the student to visit the page) that predicts the next step in the learning process based on the screen content. Only include the most relevant link that is aligned with the learning objective. Don't include the same link twice. Already visited urls: {visited_urls}"
+LINK_GENERATION_INSTRUCTION = "provide a web page url with a short description (8 words max offering the student to visit the page) that predicts the next step in the learning process based on the screen content. Only include the most relevant link that is aligned with the learning objective. Don't include links with the same domain name twice. Already visited urls: {visited_urls}"
 SUGGESTIONS_GENERATION_INSTRUCTION = "make suggestions how student can continue their learning based on the screen content and your findings"
 
 # Button settings
