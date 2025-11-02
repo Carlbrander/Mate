@@ -32,7 +32,7 @@ class ContextRetrievalService:
         self.setup_logging()
         self.logger = logging.getLogger(__name__)
 
-        self.links_queue = None
+        self.links_queue = links_queue
         # Load API key
         try:
             with open(config.API_KEY_PATH, 'r') as f:
@@ -63,7 +63,7 @@ class ContextRetrievalService:
         # Track latest context and link generation timing
         self.latest_context = None
         self.last_link_generation = 0
-        self.link_generation_interval = 60  # Generate links every 60 seconds
+        self.link_generation_interval = 10  # Generate links every 60 seconds
         
         self.logger.info("Context Retrieval Service initialized")
         self.logger.info(f"Screenshot interval: {config.SCREENSHOT_INTERVAL} seconds")
@@ -164,7 +164,7 @@ class ContextRetrievalService:
                 
                 # Generate links using the function from insights_generation.py
                 insights = generate_links(learning_objective, self.latest_context)
-                
+                print(insights)
                 if insights and insights.links:
                     # Put links in the queue (overwrites old entry if full)
                     self.links_queue.put(insights.links)

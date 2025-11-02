@@ -1,7 +1,7 @@
 # Configuration file for Context Retrieval Module
 
 # Screenshot capture settings
-SCREENSHOT_INTERVAL = 30  # Interval between screenshots in seconds
+SCREENSHOT_INTERVAL = 10  # Interval between screenshots in seconds
 
 # API settings
 # The API key is loaded from the parent directory's api_key folder

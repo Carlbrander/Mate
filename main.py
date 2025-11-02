@@ -17,7 +17,7 @@ import config
 import ctypes
 import re
 from context_retrieval.ContextRetrievalService import ContextRetrievalService
-from context_retrieval.shared_queue import OverwritingQueue
+from context_retrieval.shared_queue import links_queue
 
 def show_study_topic_dialog():
     """Show startup dialog to ask user what they're studying"""
@@ -403,7 +403,7 @@ class ELI5Overlay:
         self.extra_buttons = []
         self.extra_button_icons = []
         button_colors = ['#73946B', '#9EBC8A', '#D2D0A0']  # Green gradient colors
-        button_icons = ['➕', '🔍', '🍅']  # Icons: plus, magnifier, tomato (pomodoro)
+        button_icons = ['➕', '💡', '🍅']  # Icons: plus, light bulb (ELI5), tomato (pomodoro)
         
         for i in range(3):
             # Initially position at main button location (centered perfectly on main button center)
@@ -510,8 +510,12 @@ class ELI5Overlay:
         # Speech bubble state
         self.speech_bubble = None
         
-        # Schedule speech bubble to appear after 3 seconds
-        self.root.after(3000, self.show_speech_bubble)
+        # Proximity detection disabled - button always visible
+        self.button_visible = True
+        self.proximity_threshold = 600  # pixels (not used)
+        
+        # Start periodic queue checking (every 10 seconds)
+        self.check_queue_periodically()
 
         # Start context retrieval service in background
         self.start_context_retrieval_service()
@@ -520,18 +524,87 @@ class ELI5Overlay:
         """Start context retrieval service in a background daemon thread"""
         try:
             print("Starting context retrieval service...")
-            service = ContextRetrievalService()
-
-            self.links_queue = OverwritingQueue()
-            # Start service in daemon thread (will stop when main app exits)
-            service.links_queue = self.links_queue
-            context_thread = threading.Thread(target=service.run, daemon=True)
-            context_thread.start()
-            
-            print("Context retrieval service started successfully")
+            # Check if ContextRetrievalService class is defined
+            service_class = globals().get('ContextRetrievalService')
+            if service_class:
+                service = service_class()
+                
+                # Start service in daemon thread (will stop when main app exits)
+                # Service will use the global links_queue
+                context_thread = threading.Thread(target=service.run, daemon=True)
+                context_thread.start()
+                
+                print("Context retrieval service started successfully")
+            else:
+                print("ContextRetrievalService not defined - skipping context retrieval")
         except Exception as e:
             print(f"Warning: Could not start context retrieval service: {e}")
             print("Main app will continue without context retrieval")
+    
+    def check_proximity_periodically(self):
+        """Proximity detection disabled - button always visible"""
+        # This method is no longer used but kept for compatibility
+        pass
+    
+    def show_button(self):
+        """Make button fully visible"""
+        self.button_visible = True
+        # Set full opacity for main button circle (remove stipple)
+        self.canvas.itemconfig(self.button_circle, state='normal', fill='#537D5D', stipple='')
+        
+        # For text/image, make it visible
+        if self.is_image:
+            self.canvas.itemconfig(self.button_text, state='normal')
+        else:
+            self.canvas.itemconfig(self.button_text, state='normal')
+        
+        # Only make extra buttons visible if they're currently expanded (buttons_visible)
+        if self.buttons_visible:
+            # Make extra button circles fully visible with their original colors
+            button_colors = ['#73946B', '#9EBC8A', '#D2D0A0']  # Original colors
+            for i, button in enumerate(self.extra_buttons):
+                self.canvas.itemconfig(button, state='normal', fill=button_colors[i], stipple='')
+            # Make extra button icons visible
+            for icon in self.extra_button_icons:
+                self.canvas.itemconfig(icon, state='normal')
+            
+            if self.pomodoro_control_dots:
+                for element in self.pomodoro_control_dots:
+                    try:
+                        # Restore original pomodoro color (will need to check what it should be)
+                        self.canvas.itemconfig(element, state='normal', stipple='')
+                    except:
+                        self.canvas.itemconfig(element, state='normal')
+    
+    def hide_button(self):
+        """Make button half transparent (50% opacity)"""
+        self.button_visible = False
+        # Try a very light color that's almost white to test visibility
+        # #E8F0EA is very light (almost white with slight green tint)
+        self.canvas.itemconfig(self.button_circle, fill='#E8F0EA', stipple='')
+        
+        # Hide text/image completely (can't control their opacity in tkinter)
+        if self.is_image:
+            self.canvas.itemconfig(self.button_text, state='hidden')
+        else:
+            self.canvas.itemconfig(self.button_text, state='hidden')
+        
+        # Only apply fading to extra buttons if they're currently expanded (buttons_visible)
+        if self.buttons_visible:
+            # Make extra button circles invisible by matching transparent background
+            for i, button in enumerate(self.extra_buttons):
+                self.canvas.itemconfig(button, state='normal', fill='#010101', stipple='')
+            # Hide the icons (text can't be transparent)
+            for icon in self.extra_button_icons:
+                self.canvas.itemconfig(icon, state='hidden')
+            
+            if self.pomodoro_control_dots:
+                for element in self.pomodoro_control_dots:
+                    try:
+                        # Make pomodoro controls invisible too
+                        self.canvas.itemconfig(element, state='normal', fill='#010101', stipple='')
+                    except:
+                        self.canvas.itemconfig(element, state='hidden')
     
     def ease_out_cubic(self, t):
         """Easing function for smooth deceleration"""
@@ -633,8 +706,10 @@ class ELI5Overlay:
             
             # Make buttons visible when showing
             if direction == 'show':
-                for button in self.extra_buttons:
-                    self.canvas.itemconfig(button, state='normal')
+                # Restore original button colors
+                button_colors = ['#73946B', '#9EBC8A', '#D2D0A0']
+                for i, button in enumerate(self.extra_buttons):
+                    self.canvas.itemconfig(button, state='normal', fill=button_colors[i], stipple='')
                     self.canvas.tag_raise(button)  # Bring to front when showing
                 for icon in self.extra_button_icons:
                     self.canvas.itemconfig(icon, state='normal')
@@ -847,7 +922,7 @@ class ELI5Overlay:
         y = self.root.winfo_y() + event.y - self.drag_start_y
         self.root.geometry(f"+{x}+{y}")
         self.is_dragging = True
-        
+    
         # Move the entire button menu, keeping extra buttons in sync if visible
         # The canvas coordinates are relative, so they move automatically with the window
     
@@ -1006,8 +1081,8 @@ class ELI5Overlay:
             self.show_explanation(f"Error: Could not access API key. {str(e)}", loading=False)
             return
         
-        # Show loading message
-        self.show_explanation("Generating explanation...", loading=True)
+        # Removed loading message - user prefers to wait for final explanation
+        # self.show_explanation("Generating explanation...", loading=True)
         
         # Call Claude API
         try:
@@ -1298,7 +1373,7 @@ class ELI5Overlay:
         
         return response
     
-    def format_markdown_text(self, text_widget, markdown_text):
+    def format_markdown_text(self, text_widget, markdown_text, start_pos="1.0"):
         """Format markdown text in a CTkTextbox widget"""
         # Configure text tags for different styles (white text on green background)
         text_widget.tag_config("h1", font=("Segoe UI", 14, "bold"), spacing1=6, spacing3=3, foreground="white")
@@ -1311,7 +1386,7 @@ class ELI5Overlay:
         text_widget.tag_config("bullet", font=("Segoe UI", 10), foreground="white")
         
         lines = markdown_text.split('\n')
-        current_pos = "1.0"
+        current_pos = start_pos
         
         for line in lines:
             # Headers
@@ -1378,11 +1453,21 @@ class ELI5Overlay:
             
             current_index = text_widget.index("end-1c")
     
-    def show_speech_bubble(self):
+    def show_speech_bubble(self, message="Hey! Check out this cool feature:", link_text=None, link_url="https://www.google.com"):
         """Show a speech bubble with text and a link"""
         # Close existing speech bubble if any
         if self.speech_bubble and self.speech_bubble.winfo_exists():
             self.speech_bubble.destroy()
+        
+        # Close existing explanation window if any (ELI5 bubble)
+        try:
+            if self.explanation_window and self.explanation_window.winfo_exists():
+                self.explanation_window.withdraw()
+                self.explanation_window.update_idletasks()
+                self.explanation_window.destroy()
+                self.explanation_window = None
+        except Exception as e:
+            self.explanation_window = None
         
         # Create speech bubble window with CustomTkinter
         self.speech_bubble = ctk.CTkToplevel(self.root)
@@ -1404,7 +1489,7 @@ class ELI5Overlay:
         button_window_y = self.root.winfo_y()
         
         bubble_width = 280
-        bubble_height = 100
+        bubble_height = 160
         
         # Calculate the top-left position of the main button circle within the window
         canvas_height = int(config.BUTTON_SIZE * 5)
@@ -1461,28 +1546,31 @@ class ELI5Overlay:
         )
         bubble_frame.pack(fill='both', expand=True, padx=10, pady=10)
         
-        # Add text content
+        # Add text content (bold)
         text_label = ctk.CTkLabel(
             bubble_frame,
-            text="Hey! Check out this cool feature:",
-            font=('Segoe UI', 12),
+            text=message,
+            font=('Segoe UI', 12, 'bold'),
             text_color='white',
-            wraplength=240
+            wraplength=220  # Reduced from 240 to add more padding on sides
         )
-        text_label.pack(pady=(15, 5), padx=15)
+        text_label.pack(pady=(40, 5), padx=15)
         
-        # Add link to Google
-        link_label = ctk.CTkLabel(
-            bubble_frame,
-            text="👉 Learn more here",
-            font=('Segoe UI', 11, 'underline'),
-            text_color='#e0e0e0',
-            cursor='hand2'
-        )
-        link_label.pack(pady=(0, 15), padx=15)
-        
-        # Make link clickable - opens Google in browser
-        link_label.bind('<Button-1>', lambda e: webbrowser.open('https://www.google.com'))
+        # Add link (if provided)
+        if link_url:
+            # Display the URL text (clickable)
+            link_label = ctk.CTkLabel(
+                bubble_frame,
+                text=f"🔗 {link_url}",
+                font=('Segoe UI', 9, 'underline'),
+                text_color='#D2D0A0',  # Light beige color for visibility
+                cursor='hand2',
+                wraplength=220  # Reduced from 240 to add more padding on sides
+            )
+            link_label.pack(pady=(0, 15), padx=15)
+            
+            # Make link clickable - opens URL in browser
+            link_label.bind('<Button-1>', lambda e: webbrowser.open(link_url))
         
         # Add close button with proper padding from edges
         close_btn = ctk.CTkButton(
@@ -1518,6 +1606,81 @@ class ELI5Overlay:
             # Silently handle any destruction errors
             self.speech_bubble = None
     
+    def check_queue_periodically(self):
+        """Check the shared queue every 10 seconds for new content"""
+        try:
+            # Check if there's an item in the queue
+            if links_queue.has_item():
+                # Get the content
+                content = links_queue.get()
+                print(f"Queue check: Found content - {content}")
+                
+                # Display as speech bubble
+                if content:
+                    # Handle list of Link objects
+                    if isinstance(content, list) and len(content) > 0:
+                        # Get first link
+                        first_link = content[0]
+                        
+                        # Extract summary and URL
+                        # Check if it's a Link object with attributes
+                        if hasattr(first_link, 'summary') and hasattr(first_link, 'url'):
+                            summary = first_link.summary
+                            url = first_link.url
+                        # Or if it's a dict
+                        elif isinstance(first_link, dict):
+                            summary = first_link.get('summary', first_link.get('title', 'New insight'))
+                            url = first_link.get('url', '')
+                        else:
+                            summary = str(first_link)
+                            url = ''
+                        
+                        # Show speech bubble with formatted content
+                        self.show_speech_bubble(
+                            message=summary,
+                            link_text=None,
+                            link_url=url
+                        )
+                    # Handle dict format
+                    elif isinstance(content, dict):
+                        message = content.get('message', content.get('summary', 'New insight available!'))
+                        links = content.get('links', content.get('url', ''))
+                        
+                        if isinstance(links, list) and len(links) > 0:
+                            first_link = links[0]
+                            link_url = first_link.get('url', '') if isinstance(first_link, dict) else str(first_link)
+                        else:
+                            link_url = links if isinstance(links, str) else ''
+                        
+                        self.show_speech_bubble(
+                            message=message,
+                            link_text=None,
+                            link_url=link_url if link_url else None
+                        )
+                    # Handle string or single Link object
+                    else:
+                        if hasattr(content, 'summary') and hasattr(content, 'url'):
+                            self.show_speech_bubble(
+                                message=content.summary,
+                                link_text=None,
+                                link_url=content.url
+                            )
+                        else:
+                            self.show_speech_bubble(message=str(content), link_text=None, link_url=None)
+                    
+                    # Clear the queue after displaying
+                    links_queue.clear()
+                    print("Queue cleared after displaying content")
+            else:
+                print("Queue check: No new content")
+        except Exception as e:
+            print(f"Error checking queue: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # Schedule next check in 10 seconds (10000 ms)
+        self.root.after(10000, self.check_queue_periodically)
+    
     def show_explanation(self, text, loading=False):
         """Show explanation in a speech bubble style window"""
         # Close existing explanation window if any
@@ -1529,6 +1692,11 @@ class ELI5Overlay:
         except Exception as e:
             # Silently handle any destruction errors
             pass
+        
+        # Close existing speech bubble if any (queue bubble)
+        if self.speech_bubble and self.speech_bubble.winfo_exists():
+            self.speech_bubble.destroy()
+            self.speech_bubble = None
         
         # Create new explanation window
         self.explanation_window = ctk.CTkToplevel(self.root)
@@ -1548,8 +1716,8 @@ class ELI5Overlay:
         button_window_x = self.root.winfo_x()
         button_window_y = self.root.winfo_y()
         
-        bubble_width = 400
-        bubble_height = 300
+        bubble_width = 420
+        # Height will be calculated based on content
         
         # Calculate the top-left position of the main button circle within the window
         canvas_height = int(config.BUTTON_SIZE * 5)
@@ -1566,11 +1734,127 @@ class ELI5Overlay:
         button_top_left_x = button_window_x + horizontal_offset + padding
         button_top_left_y = button_window_y + main_button_y_in_canvas
         
-        # Position bubble so its bottom-right corner is at button's top-left corner
-        bubble_x = button_top_left_x - bubble_width
-        bubble_y = button_top_left_y - bubble_height
+        # Create rounded frame in green (speech bubble style) - will calculate height after text
+        bubble_frame = ctk.CTkFrame(
+            self.explanation_window,
+            corner_radius=15,
+            fg_color='#537D5D',  # Match mate button color
+            border_width=0,
+            width=bubble_width - 20,
+            height=100  # Temporary height
+        )
+        bubble_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        bubble_frame.pack_propagate(False)  # Prevent frame from shrinking
         
-        self.explanation_window.geometry(f"{bubble_width}x{bubble_height}+{bubble_x}+{bubble_y}")
+        # Helper function to safely close the explanation window
+        def close_explanation():
+            try:
+                if self.explanation_window and self.explanation_window.winfo_exists():
+                    self.explanation_window.withdraw()
+                    self.explanation_window.update_idletasks()
+                    self.explanation_window.destroy()
+                    self.explanation_window = None
+            except Exception as e:
+                self.explanation_window = None
+        
+        # Bind Escape key to close window
+        self.explanation_window.bind('<Escape>', lambda e: close_explanation())
+        
+        # Content frame for text widget
+        content_frame = tk.Frame(bubble_frame, bg='#537D5D')
+        content_frame.pack(fill='both', expand=True, padx=15, pady=(40, 15))
+        
+        # Use standard tkinter Text widget for markdown support with GREEN background and WHITE text
+        text_widget = tk.Text(
+            content_frame,
+            wrap="word",
+            font=("Segoe UI", 10),
+            bg='#537D5D',  # Green background
+            fg='white',  # White text
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            padx=10,
+            pady=10,
+            selectbackground='#73946B',
+            selectforeground='white',
+            width=40
+            # No fixed height - will be calculated
+        )
+        
+        # Insert text with markdown formatting FIRST
+        if loading:
+            text_widget.insert('1.0', text)
+        else:
+            # Configure the title tag first to be bold and slightly larger
+            text_widget.tag_config('title_bold', font=('Segoe UI', 11, 'bold'), foreground='white')
+            
+            # Add bold title "Simple Explanation" at the very top (position 1.0)
+            text_widget.insert('1.0', "Simple Explanation", 'title_bold')
+            text_widget.insert('end', "\n\n")
+            
+            # Mark where the explanation content should start (after title and newlines)
+            content_start = text_widget.index('end')
+            
+            # Add the actual explanation content starting from after the title
+            self.format_markdown_text(text_widget, text, start_pos=content_start)
+        
+        # Update to get actual text dimensions
+        text_widget.update_idletasks()
+        
+        # Calculate required height based on content
+        # Count the number of display lines (including wrapped lines)
+        line_count = int(text_widget.index('end-1c').split('.')[0])
+        
+        # Calculate pixel height needed for the text
+        # Each line is approximately 18 pixels with the current font
+        line_height = 18
+        text_height_pixels = line_count * line_height + 20  # +20 for padding
+        
+        # Set maximum and minimum heights
+        min_height = 80  # Minimum content height
+        max_height = 400  # Maximum before scrollbar appears
+        
+        # Determine if we need a scrollbar
+        needs_scrollbar = text_height_pixels > max_height
+        content_height = min(max(text_height_pixels, min_height), max_height)
+        
+        # Set text widget height in lines
+        visible_lines = max(3, min(line_count, int(max_height / line_height)))
+        text_widget.configure(height=visible_lines)
+        
+        # Add scrollbar only if needed
+        if needs_scrollbar:
+            scrollbar = tk.Scrollbar(
+                content_frame, 
+                command=text_widget.yview,
+                bg='#537D5D',
+                troughcolor='#73946B',
+                activebackground='#9EBC8A',
+                borderwidth=0,
+                highlightthickness=0
+            )
+            text_widget.configure(yscrollcommand=scrollbar.set)
+            scrollbar.pack(side='right', fill='y')
+        
+        text_widget.pack(side='left', fill='both', expand=True)
+        
+        # Make text read-only if not loading
+        if not loading:
+            text_widget.config(state='disabled')
+        
+        # Calculate final bubble height based on content
+        bubble_height = content_height + 40 + 15 + 20  # content + top_padding + bottom_padding + frame_padding
+        
+        # Update frame height
+        bubble_frame.configure(height=bubble_height)
+        
+        # Position bubble so its bottom-right corner is at button's top-left corner
+        # Start with initial positioning
+        bubble_x = button_top_left_x - bubble_width
+        bubble_y = button_top_left_y - bubble_height - 20  # -20 for outer padding
+        
+        self.explanation_window.geometry(f"{bubble_width}x{bubble_height + 20}+{bubble_x}+{bubble_y}")
         
         # Update to apply geometry and get actual dimensions
         self.explanation_window.update_idletasks()
@@ -1594,32 +1878,9 @@ class ELI5Overlay:
         final_bubble_x = bubble_x + x_adjustment
         final_bubble_y = bubble_y + y_adjustment
         
-        self.explanation_window.geometry(f"{bubble_width}x{bubble_height}+{final_bubble_x}+{final_bubble_y}")
+        self.explanation_window.geometry(f"{bubble_width}x{bubble_height + 20}+{final_bubble_x}+{final_bubble_y}")
         
-        # Create rounded frame in green (speech bubble style)
-        bubble_frame = ctk.CTkFrame(
-            self.explanation_window,
-            corner_radius=15,
-            fg_color='#537D5D',  # Match mate button color
-            border_width=0
-        )
-        bubble_frame.pack(fill='both', expand=True, padx=10, pady=10)
-        
-        # Helper function to safely close the explanation window
-        def close_explanation():
-            try:
-                if self.explanation_window and self.explanation_window.winfo_exists():
-                    self.explanation_window.withdraw()
-                    self.explanation_window.update_idletasks()
-                    self.explanation_window.destroy()
-                    self.explanation_window = None
-            except Exception as e:
-                self.explanation_window = None
-        
-        # Bind Escape key to close window
-        self.explanation_window.bind('<Escape>', lambda e: close_explanation())
-        
-        # Add close button with proper padding from edges
+        # Add close button LAST so it's on top with proper padding from edges
         close_btn = ctk.CTkButton(
             bubble_frame,
             text="✕",
@@ -1631,53 +1892,10 @@ class ELI5Overlay:
             command=close_explanation,
             font=('Segoe UI', 12)
         )
-        # Position with proper padding from right edge
+        # Position with proper padding from right edge and raise to top
         frame_width = bubble_width - 20
-        close_btn.place(x=frame_width - 25 - 18, y=8)
-        
-        # Content frame for text widget
-        content_frame = tk.Frame(bubble_frame, bg='#537D5D')
-        content_frame.pack(fill='both', expand=True, padx=15, pady=(40, 15))
-        
-        # Use standard tkinter Text widget for markdown support with GREEN background and WHITE text
-        text_widget = tk.Text(
-            content_frame,
-            wrap="word",
-            font=("Segoe UI", 10),
-            bg='#537D5D',  # Green background
-            fg='white',  # White text
-            relief="flat",
-            borderwidth=0,
-            highlightthickness=0,
-            padx=10,
-            pady=10,
-            selectbackground='#73946B',
-            selectforeground='white',
-            width=40,
-            height=12
-        )
-        
-        # Add scrollbar with green theme
-        scrollbar = tk.Scrollbar(
-            content_frame, 
-            command=text_widget.yview,
-            bg='#537D5D',
-            troughcolor='#73946B',
-            activebackground='#9EBC8A',
-            borderwidth=0,
-            highlightthickness=0
-        )
-        text_widget.configure(yscrollcommand=scrollbar.set)
-        
-        scrollbar.pack(side='right', fill='y')
-        text_widget.pack(side='left', fill='both', expand=True)
-        
-        # Insert text with markdown formatting
-        if loading:
-            text_widget.insert('1.0', text)
-        else:
-            self.format_markdown_text(text_widget, text)
-            text_widget.config(state='disabled')  # Make read-only
+        close_btn.place(x=frame_width - 25 - 15, y=8)
+        close_btn.lift()  # Ensure button is on top
     
     def run(self):
         """Start the application"""
