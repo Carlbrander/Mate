@@ -54,7 +54,7 @@ python main.py
 3. **Highlight any text and click the button** – An explanation window will instantly appear with helpful information.
 4. **Start a Pomodoro timer** – Click the button to begin a focused Pomodoro study session.
 5. **Get personalized study suggestions** – The AI monitors your work and recommends the next best resources to explore.
-6. **Snapshot Your Study Session**  - At any time, click the "Snapshot" button in the menu to instantly generate a concise summary of everything you've studied during the session – including key topics, definitions, and main ideas. The summary appears in a new window and can be copied for your notes or revision.
+6. **Snapshot Your Study Session**  - At any time, click the "+" button in the menu to instantly generate a concise summary of everything you've studied during the session – including key topics, definitions, and main ideas. The summary appears in a new window and can be copied for your notes or revision.
 
 
 ## Features
