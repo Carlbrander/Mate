@@ -1166,6 +1166,7 @@ class ELI5Overlay:
         self.notification_popup.wm_attributes('-transparentcolor', transparent_bg)
         
         # Position so bottom-right of popup aligns with top-left of main button
+        # First, update to get accurate button window position
         self.root.update_idletasks()
         button_window_x = self.root.winfo_x()
         button_window_y = self.root.winfo_y()
@@ -1173,25 +1174,29 @@ class ELI5Overlay:
         popup_width = 400
         popup_height = 120
         
-        # Calculate button position
+        # Calculate the top-left position of the main button circle within the window
         canvas_height = int(config.BUTTON_SIZE * 5)
-        horizontal_offset = 60
+        horizontal_offset = 60  # Same as in __init__
         padding = (int(config.BUTTON_SIZE * 1.15) - config.BUTTON_SIZE) // 2
         
+        # Determine button position based on current layout
         if self.current_layout == 'top':
             main_button_y_in_canvas = padding
         else:
             main_button_y_in_canvas = canvas_height - int(config.BUTTON_SIZE * 1.15) + padding
         
+        # Top-left of button circle in screen coordinates
         button_top_left_x = button_window_x + horizontal_offset + padding
         button_top_left_y = button_window_y + main_button_y_in_canvas
         
+        # Position popup so its bottom-right corner is at button's top-left corner
+        # Start with initial positioning (matching speech bubble positioning)
         popup_x = button_top_left_x - popup_width
-        popup_y = button_top_left_y - popup_height
+        popup_y = button_top_left_y - popup_height - 20  # -20 for outer padding (matching ELI5)
         
-        self.notification_popup.geometry(f"{popup_width}x{popup_height}+{popup_x}+{popup_y}")
+        self.notification_popup.geometry(f"{popup_width}x{popup_height + 20}+{popup_x}+{popup_y}")
         
-        # Create rounded frame
+        # Create rounded frame first so dimensions can be calculated accurately
         popup_frame = ctk.CTkFrame(
             self.notification_popup,
             corner_radius=15,
@@ -1200,6 +1205,7 @@ class ELI5Overlay:
         )
         popup_frame.pack(fill='both', expand=True, padx=10, pady=10)
         
+        # Add content to frame (needed before calculating dimensions)
         # Title label
         title_label = ctk.CTkLabel(
             popup_frame,
@@ -1231,8 +1237,37 @@ class ELI5Overlay:
             command=lambda: self.notification_popup.destroy() if self.notification_popup else None,
             font=('Segoe UI', 12)
         )
+        # Position close button with proper padding from the right edge (matching speech bubble)
+        # The frame has 10px outer padding, so we position relative to frame width
+        # Frame actual width is popup_width - 20 (10px padding on each side)
         frame_width = popup_width - 20
-        close_btn.place(x=frame_width - 25 - 18, y=8)
+        # Position button 15px from the right edge of the frame (matching ELI5)
+        close_btn.place(x=frame_width - 25 - 15, y=8)
+        close_btn.lift()  # Ensure button is on top (matching ELI5)
+        
+        # Update to apply geometry and get actual dimensions
+        self.notification_popup.update_idletasks()
+        self.notification_popup.update()
+        
+        # Get actual popup dimensions and position
+        actual_popup_width = self.notification_popup.winfo_width()
+        actual_popup_height = self.notification_popup.winfo_height()
+        actual_popup_x = self.notification_popup.winfo_x()
+        actual_popup_y = self.notification_popup.winfo_y()
+        
+        # Calculate the bottom-right corner of the actual popup (accounting for the 10px padding of the frame)
+        popup_bottom_right_x = actual_popup_x + actual_popup_width - 10
+        popup_bottom_right_y = actual_popup_y + actual_popup_height - 10
+        
+        # Calculate the adjustment needed to align perfectly
+        x_adjustment = button_top_left_x - popup_bottom_right_x
+        y_adjustment = button_top_left_y - popup_bottom_right_y
+        
+        # Apply adjustment
+        final_popup_x = popup_x + x_adjustment
+        final_popup_y = popup_y + y_adjustment
+        
+        self.notification_popup.geometry(f"{popup_width}x{popup_height + 20}+{final_popup_x}+{final_popup_y}")
         
         # Auto-hide after 8 seconds
         self.root.after(8000, lambda: self.notification_popup.destroy() if self.notification_popup and self.notification_popup.winfo_exists() else None)
@@ -1648,11 +1683,11 @@ class ELI5Overlay:
         button_top_left_y = button_window_y + main_button_y_in_canvas
         
         # Position bubble so its bottom-right corner is at button's top-left corner
-        # Start with initial positioning
+        # Start with initial positioning (matching ELI5 window positioning)
         bubble_x = button_top_left_x - bubble_width
-        bubble_y = button_top_left_y - bubble_height
-        
-        self.speech_bubble.geometry(f"{bubble_width}x{bubble_height}+{bubble_x}+{bubble_y}")
+        bubble_y = button_top_left_y - bubble_height - 20  # -20 for outer padding (matching ELI5)
+
+        self.speech_bubble.geometry(f"{bubble_width}x{bubble_height + 20}+{bubble_x}+{bubble_y}")
         
         # Update to apply geometry and get actual dimensions
         self.speech_bubble.update_idletasks()
@@ -1676,7 +1711,7 @@ class ELI5Overlay:
         final_bubble_x = bubble_x + x_adjustment
         final_bubble_y = bubble_y + y_adjustment
         
-        self.speech_bubble.geometry(f"{bubble_width}x{bubble_height}+{final_bubble_x}+{final_bubble_y}")
+        self.speech_bubble.geometry(f"{bubble_width}x{bubble_height + 20}+{final_bubble_x}+{final_bubble_y}")
         
         # Create rounded frame for the speech bubble
         bubble_frame = ctk.CTkFrame(
@@ -1725,12 +1760,13 @@ class ELI5Overlay:
             command=self.hide_speech_bubble,
             font=('Segoe UI', 12)
         )
-        # Position close button with proper padding from the right edge
+        # Position close button with proper padding from the right edge (matching ELI5 window)
         # The frame has 10px outer padding, so we position relative to frame width
         # Frame actual width is bubble_width - 20 (10px padding on each side)
         frame_width = bubble_width - 20
-        # Position button 18px from the right edge of the frame
-        close_btn.place(x=frame_width - 25 - 18, y=8)
+        # Position button 15px from the right edge of the frame (matching ELI5)
+        close_btn.place(x=frame_width - 25 - 15, y=8)
+        close_btn.lift()  # Ensure button is on top (matching ELI5)
         
         # Auto-hide after 10 seconds
         self.root.after(10000, self.hide_speech_bubble)
