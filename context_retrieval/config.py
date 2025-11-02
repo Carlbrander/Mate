@@ -9,7 +9,7 @@ import os
 API_KEY_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "api_key", "api_key.txt")
 
 # Claude model to use for image analysis
-CLAUDE_MODEL = "claude-haiku-4-5"
+CLAUDE_MODEL = "claude-sonnet-4-5"
 
 # Maximum tokens for API response
 MAX_TOKENS = 1500
@@ -57,6 +57,9 @@ SCREENSHOTS_DIR = "context_retrieval/screenshots"  # Directory to save screensho
 # Context output settings
 SAVE_CONTEXTS = False  # Whether to save extracted contexts to disk
 CONTEXTS_DIR = "context_retrieval/contexts"  # Directory to save context XML files
+
+# Summary history settings
+SUMMARY_HISTORY_FILE = "context_retrieval/summary_history.txt"  # File to save learning summary history
 
 # Logging settings
 LOG_FILE = "context_retrieval/context_retrieval.log"

@@ -20,7 +20,7 @@ from context_retrieval.screenshot_capture import ScreenshotCapture
 from context_retrieval.claude_analyzer import ClaudeAnalyzer
 from context_retrieval.context_manager import ContextManager
 from context_retrieval.shared_queue import links_queue
-from context_retrieval.insights_generation import generate_links
+from context_retrieval.insights_generation import generate_links, update_summary_history
 
 
 class ContextRetrievalService:
@@ -161,6 +161,22 @@ class ContextRetrievalService:
                 if not learning_objective:
                     self.logger.warning("Learning objective environment variable is not set")
                     return
+                
+                # Update the summary history with new context
+                self.logger.info("Updating summary history...")
+                updated_summary = update_summary_history(learning_objective, self.latest_context)
+                
+                if updated_summary:
+                    self.logger.info("Summary history updated successfully")
+                    
+                    # Print summary to console
+                    print("\n" + "=" * 60)
+                    print("UPDATED LEARNING SUMMARY:")
+                    print("=" * 60)
+                    print(updated_summary)
+                    print("=" * 60 + "\n")
+                else:
+                    self.logger.warning("Failed to update summary history")
                 
                 # Generate links using the function from insights_generation.py
                 insights = generate_links(learning_objective, self.latest_context)
