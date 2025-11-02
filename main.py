@@ -18,6 +18,7 @@ import ctypes
 import re
 from context_retrieval.ContextRetrievalService import ContextRetrievalService
 from context_retrieval.shared_queue import links_queue
+from context_retrieval.insights_generation import flush_summary_history, generate_final_summary
 
 def show_study_topic_dialog():
     """Show startup dialog to ask user what they're studying"""
@@ -509,6 +510,7 @@ class ELI5Overlay:
         
         # Speech bubble state
         self.speech_bubble = None
+        self.notification_popup = None
         
         # Proximity detection disabled - button always visible
         self.button_visible = True
@@ -1018,8 +1020,9 @@ class ELI5Overlay:
         print(f"Extra button {index} clicked")
         
         if index == 0:
-            # First button (➕) - Plus functionality (placeholder)
-            print("Plus button - not yet implemented")
+            # First button (➕) - Generate and save learning summary
+            print("Plus button clicked - generating session summary...")
+            self.generate_and_save_summary()
         elif index == 1:
             # Second button (🔍) - Magnifier: ELI5 text explanation
             self.explain_selected_text()
@@ -1095,6 +1098,144 @@ class ELI5Overlay:
             error_msg = f"Error calling Claude API: {str(e)}"
             print(f"ERROR: {error_msg}")
             self.show_explanation(error_msg)
+    
+    def generate_and_save_summary(self):
+        """Generate and save a formatted markdown summary of the learning session"""
+        print("\n" + "="*60)
+        print("GENERATING LEARNING SESSION SUMMARY")
+        print("="*60)
+        
+        # Get learning objective
+        learning_objective = os.getenv('LEARNING_OBJECTIVE', 'General Study')
+        print(f"Learning objective: {learning_objective}")
+        
+        # Generate the formatted summary
+        try:
+            summary_markdown = generate_final_summary(learning_objective)
+            
+            if not summary_markdown:
+                print("Failed to generate summary")
+                self.show_notification_popup("Summary Generation Failed", "Could not generate summary. Please try again later.")
+                return
+            
+            # Save to file
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            summary_filename = f"learning_summary_{timestamp}.md"
+            summary_path = os.path.join("context_retrieval", summary_filename)
+            
+            # Ensure directory exists
+            os.makedirs("context_retrieval", exist_ok=True)
+            
+            # Write summary to file
+            with open(summary_path, 'w', encoding='utf-8') as f:
+                f.write(summary_markdown)
+            
+            print(f"Summary saved to: {summary_path}")
+            print("="*60 + "\n")
+            
+            # Show notification popup
+            abs_path = os.path.abspath(summary_path)
+            self.show_notification_popup(
+                "Session Summary Saved! 📝",
+                f"Your learning summary has been saved to:\n\n{abs_path}"
+            )
+            
+        except Exception as e:
+            print(f"Error generating summary: {e}")
+            import traceback
+            traceback.print_exc()
+            self.show_notification_popup("Error", f"Failed to generate summary: {str(e)}")
+    
+    def show_notification_popup(self, title, message):
+        """Show a notification popup similar to the link popup"""
+        # Close existing popup if any
+        if hasattr(self, 'notification_popup') and self.notification_popup and self.notification_popup.winfo_exists():
+            self.notification_popup.destroy()
+        
+        # Create notification window
+        self.notification_popup = ctk.CTkToplevel(self.root)
+        self.notification_popup.title("")
+        self.notification_popup.attributes('-topmost', True)
+        
+        # Remove title bar
+        self.notification_popup.overrideredirect(True)
+        
+        # Make background transparent
+        transparent_bg = '#010101'
+        self.notification_popup.configure(fg_color=transparent_bg)
+        self.notification_popup.wm_attributes('-transparentcolor', transparent_bg)
+        
+        # Position so bottom-right of popup aligns with top-left of main button
+        self.root.update_idletasks()
+        button_window_x = self.root.winfo_x()
+        button_window_y = self.root.winfo_y()
+        
+        popup_width = 400
+        popup_height = 120
+        
+        # Calculate button position
+        canvas_height = int(config.BUTTON_SIZE * 5)
+        horizontal_offset = 60
+        padding = (int(config.BUTTON_SIZE * 1.15) - config.BUTTON_SIZE) // 2
+        
+        if self.current_layout == 'top':
+            main_button_y_in_canvas = padding
+        else:
+            main_button_y_in_canvas = canvas_height - int(config.BUTTON_SIZE * 1.15) + padding
+        
+        button_top_left_x = button_window_x + horizontal_offset + padding
+        button_top_left_y = button_window_y + main_button_y_in_canvas
+        
+        popup_x = button_top_left_x - popup_width
+        popup_y = button_top_left_y - popup_height
+        
+        self.notification_popup.geometry(f"{popup_width}x{popup_height}+{popup_x}+{popup_y}")
+        
+        # Create rounded frame
+        popup_frame = ctk.CTkFrame(
+            self.notification_popup,
+            corner_radius=15,
+            fg_color='#537D5D',
+            border_width=0
+        )
+        popup_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Title label
+        title_label = ctk.CTkLabel(
+            popup_frame,
+            text=title,
+            font=('Segoe UI', 14, 'bold'),
+            text_color='white'
+        )
+        title_label.pack(pady=(15, 5), padx=15)
+        
+        # Message label
+        message_label = ctk.CTkLabel(
+            popup_frame,
+            text=message,
+            font=('Segoe UI', 10),
+            text_color='#e0e0e0',
+            wraplength=360
+        )
+        message_label.pack(pady=(0, 15), padx=15)
+        
+        # Close button
+        close_btn = ctk.CTkButton(
+            popup_frame,
+            text="✕",
+            width=25,
+            height=25,
+            corner_radius=12,
+            fg_color='#73946B',
+            hover_color='#9EBC8A',
+            command=lambda: self.notification_popup.destroy() if self.notification_popup else None,
+            font=('Segoe UI', 12)
+        )
+        frame_width = popup_width - 20
+        close_btn.place(x=frame_width - 25 - 18, y=8)
+        
+        # Auto-hide after 8 seconds
+        self.root.after(8000, lambda: self.notification_popup.destroy() if self.notification_popup and self.notification_popup.winfo_exists() else None)
     
     def start_pomodoro(self):
         """Start the Pomodoro timer integrated into the button"""
@@ -1941,6 +2082,10 @@ if __name__ == "__main__":
         # Verify environment variable is saved
         print(f"Environment variable LEARNING_OBJECTIVE = '{os.environ.get('LEARNING_OBJECTIVE', 'NOT SET')}'")
         print("")  # Empty line for readability
+        
+        # Flush the summary history for new session
+        print("Starting new learning session - flushing old summary...")
+        flush_summary_history()
         
         # Start the main application
         app = ELI5Overlay()
